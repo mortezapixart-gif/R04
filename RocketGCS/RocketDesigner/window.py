@@ -18,7 +18,7 @@ import json
 import os
 import sys
 
-from PySide6.QtCore import QPointF, QRectF, Qt, Signal
+from PySide6.QtCore import QPointF, QRectF, Qt, Signal, QTimer
 from PySide6.QtGui import (QBrush, QColor, QFont, QLinearGradient, QPainter,
                            QPainterPath, QPalette, QPen, QPixmap)
 from PySide6.QtWidgets import (QAbstractSpinBox, QButtonGroup, QCheckBox, QComboBox,
@@ -34,6 +34,7 @@ from core.barrowman import (  # noqa: E402
     fin_set_cg_mm, nose_cg_mm, suggest_fin_span_mm, suggest_nose_mass_g,
     center_of_gravity_mm,
 )
+from core.design_transfer import write_design_transfer  # noqa: E402
 
 from blueprint import Blueprint, THEME, fa, verdict_color  # noqa: E402
 from gauge import MarginGauge  # noqa: E402
@@ -570,14 +571,22 @@ class DesignerWindow(QWidget):
         hl.addWidget(self.lbl_verdict)
         self.btn_save = QPushButton("ذخیرهٔ طرح")
         self.btn_open = QPushButton("بازکردن طرح")
+        self.btn_transfer = QPushButton("ارسال به ایستگاه")
         self.btn_save.setObjectName("ActionBtn")
         self.btn_open.setObjectName("GhostBtn")
+        self.btn_transfer.setObjectName("ActionBtn")
         self.btn_save.setCursor(Qt.PointingHandCursor)
         self.btn_open.setCursor(Qt.PointingHandCursor)
+        self.btn_transfer.setCursor(Qt.PointingHandCursor)
         self.btn_save.clicked.connect(self.save_json)
         self.btn_open.clicked.connect(self.open_json)
+        self.btn_transfer.clicked.connect(self.transfer_to_station)
+        self.btn_transfer.setToolTip(
+            "تمام هندسه، جرم‌ها، نقاط CG/CP و مشخصات نازل را به ایستگاه بفرست "
+            "و برای استفاده در پایش و پیش‌بینی آماده کن.")
         hl.addWidget(self.btn_save)
         hl.addWidget(self.btn_open)
+        hl.addWidget(self.btn_transfer)
         root.addWidget(header)
 
         # ================= بدنه: پنل راست + محتوا =================
@@ -615,12 +624,16 @@ class DesignerWindow(QWidget):
         self.cmb_fin_n = SoftComboBox()
         self.cmb_fin_n.addItems(["3", "4", "6"])
         _dark_popup(self.cmb_fin_n)
+        self.cmb_fin_shape = SoftComboBox()
+        self.cmb_fin_shape.addItems(["ذوزنقه‌ای", "مثلثی", "مستطیلی"])
+        _dark_popup(self.cmb_fin_shape)
         self.sp_root = _spin(20, 400, 100)
         self.sp_tip = _spin(0, 400, 60)
         self.sp_span = _spin(10, 300, 90)
         self.sp_sweep = _spin(0, 300, 20)
         self.sp_fin_mass = _spin(0, 300, 8, step=1)
         card2.add_row("تعداد باله", self.cmb_fin_n)
+        card2.add_row("شکل باله", self.cmb_fin_shape)
         card2.add_row("وتر ریشه (mm)", self.sp_root)
         card2.add_row("وتر نوک (mm)", self.sp_tip)
         card2.add_row("دهانه -- بیرون‌زدگی (mm)", self.sp_span)
@@ -634,13 +647,17 @@ class DesignerWindow(QWidget):
         self.sp_body_pos = _spin(5, 290, 36, step=1)
         self.sp_engine_mass = _spin(0, 5000, 350)
         self.sp_engine_pos = _spin(0, 60, 4, step=1)
+        self.sp_propellant_mass = _spin(0, 5000, 100)
         self.sp_chute_mass = _spin(0, 2000, 60)
+        self.sp_chute_diameter = _spin(0, 800, 120)
         self.sp_chute_pos = _spin(5, 290, 20, step=1)
         card3.add_row("جرم بدنه/ساختار (g)", self.sp_body_mass)
         card3.add_row("موضع مرکز بدنه (cm از نوک)", self.sp_body_pos)
         card3.add_row("موتور + سوخت (g)", self.sp_engine_mass)
+        card3.add_row("جرم سوخت (g)", self.sp_propellant_mass)
         card3.add_row("موضع مرکز موتور (cm از انتها)", self.sp_engine_pos)
         card3.add_row("چتر + آواتار (g)", self.sp_chute_mass)
+        card3.add_row("قطر چتر (cm)", self.sp_chute_diameter)
         card3.add_row("موضع چتر (cm از نوک)", self.sp_chute_pos)
         pv.addWidget(card3)
 
@@ -658,6 +675,23 @@ class DesignerWindow(QWidget):
         card4.body.addWidget(self.chk_meas)
         card4.add_row("فاصلهٔ CG از نوک (cm)", self.sp_meas)
         pv.addWidget(card4)
+
+        # کارت نازل: اختیاری است، اما اگر در طراحی پر شده باشد همراه هندسه و
+        # جرم‌ها به ایستگاه می‌رود و دیگر لازم نیست همان اعداد دوباره تایپ شوند.
+        card5 = ParamCard("موتور و نازل (برای انتقال)", THEME["yellow"])
+        self.sp_throat = _spin(0, 500, 8)
+        self.sp_exit = _spin(0, 1000, 20)
+        self.sp_conv_angle = _spin(0, 90, 45)
+        self.sp_div_angle = _spin(0, 90, 15)
+        self.sp_nozzle_len = _spin(0, 100, 3, step=1)
+        self.sp_chamber_p = _spin(1, 300, 40)
+        card5.add_row("قطر گلوگاه (mm)", self.sp_throat)
+        card5.add_row("قطر خروجی (mm)", self.sp_exit)
+        card5.add_row("زاویه همگرا (درجه)", self.sp_conv_angle)
+        card5.add_row("زاویه واگرا (درجه)", self.sp_div_angle)
+        card5.add_row("طول نازل (cm)", self.sp_nozzle_len)
+        card5.add_row("فشار محفظه (bar)", self.sp_chamber_p)
+        pv.addWidget(card5)
         pv.addStretch(1)
         panel_scroll.setWidget(panel)
         body.addWidget(panel_scroll)
@@ -713,12 +747,17 @@ class DesignerWindow(QWidget):
             (self.sp_diameter, "sp_diameter"), (self.sp_body_len, "sp_body_len"),
             (self.cmb_shape, "cmb_shape"), (self.sp_nose_len, "sp_nose_len"),
             (self.sp_nose_mass, "sp_nose_mass"), (self.cmb_fin_n, "cmb_fin_n"),
-            (self.sp_root, "sp_root"), (self.sp_tip, "sp_tip"),
+            (self.cmb_fin_shape, "cmb_fin_shape"), (self.sp_root, "sp_root"), (self.sp_tip, "sp_tip"),
             (self.sp_span, "sp_span"), (self.sp_sweep, "sp_sweep"),
             (self.sp_fin_mass, "sp_fin_mass"), (self.sp_body_mass, "sp_body_mass"),
             (self.sp_body_pos, "sp_body_pos"), (self.sp_engine_mass, "sp_engine_mass"),
+            (self.sp_propellant_mass, "sp_propellant_mass"),
             (self.sp_engine_pos, "sp_engine_pos"), (self.sp_chute_mass, "sp_chute_mass"),
+            (self.sp_chute_diameter, "sp_chute_diameter"),
             (self.sp_chute_pos, "sp_chute_pos"), (self.sp_meas, "chk_meas"),
+            (self.sp_throat, "sp_throat"), (self.sp_exit, "sp_exit"),
+            (self.sp_conv_angle, "sp_conv_angle"), (self.sp_div_angle, "sp_div_angle"),
+            (self.sp_nozzle_len, "sp_nozzle_len"), (self.sp_chamber_p, "sp_chamber_p"),
         ]
         for field, key in self._live:
             if isinstance(field, QComboBox):
@@ -737,6 +776,12 @@ class DesignerWindow(QWidget):
         self.blueprint.highlight(key)
 
     def geometry_inputs(self) -> RocketGeometry:
+        fin_shape = self.cmb_fin_shape.currentText()
+        fin_tip = self.sp_tip.value()
+        if fin_shape == "مثلثی":
+            fin_tip = 0.0
+        elif fin_shape == "مستطیلی":
+            fin_tip = self.sp_root.value()
         return RocketGeometry(
             body_diameter_mm=self.sp_diameter.value(),
             body_length_mm=self.sp_body_len.value() * 10.0,
@@ -744,7 +789,7 @@ class DesignerWindow(QWidget):
             nose_shape=self.cmb_shape.currentText(),
             fin_count=int(self.cmb_fin_n.currentText()),
             fin_root_chord_mm=self.sp_root.value(),
-            fin_tip_chord_mm=self.sp_tip.value(),
+            fin_tip_chord_mm=fin_tip,
             fin_span_mm=self.sp_span.value(),
             fin_sweep_mm=self.sp_sweep.value(),
         )
@@ -835,8 +880,94 @@ class DesignerWindow(QWidget):
     # ------------------------------------------------------------------
     _FIELDS = ["sp_diameter", "sp_body_len", "sp_nose_len", "sp_nose_mass",
                "sp_root", "sp_tip", "sp_span", "sp_sweep", "sp_fin_mass",
-               "sp_body_mass", "sp_body_pos", "sp_engine_mass", "sp_engine_pos",
-               "sp_chute_mass", "sp_chute_pos"]
+               "sp_body_mass", "sp_body_pos", "sp_engine_mass", "sp_propellant_mass",
+               "sp_engine_pos", "sp_chute_mass", "sp_chute_diameter", "sp_chute_pos",
+               "sp_throat", "sp_exit",
+               "sp_conv_angle", "sp_div_angle", "sp_nozzle_len", "sp_chamber_p"]
+
+    def export_design_payload(self) -> dict:
+        """ساخت قرارداد کامل انتقال به ایستگاه.
+
+        علاوه بر مقادیر خام، خروجی بارومانِ همان لحظه هم ذخیره می‌شود تا
+        ایستگاه دقیقاً همان CP/CG و حاشیه‌ای را ببیند که کاربر روی بوم دیده
+        است؛ ایستگاه برای اجرای پیش‌بینی از همین داده‌ها و هندسهٔ باله‌ها
+        استفاده می‌کند، نه از یک فرم ناقصِ جداگانه.
+        """
+        geo = self.geometry_inputs()
+        items = self._mass_items(geo)
+        cg_mm = self.sp_meas.value() * 10.0 if self.chk_meas.isChecked() else center_of_gravity_mm(items)
+        res = analyze(geo, cg_mm)
+        total_g = sum(item.mass_g for item in items)
+        engine_g = self.sp_engine_mass.value()
+        propellant_g = min(max(self.sp_propellant_mass.value(), 0.0), max(engine_g, 0.0))
+        return {
+            "schema_version": 1,
+            "mode": "designer",
+            "units": {"length": "mm", "mass": "g", "pressure": "bar"},
+            "geometry": {
+                "body_diameter_mm": geo.body_diameter_mm,
+                "body_length_mm": geo.body_length_mm,
+                "nose_length_mm": geo.nose_length_mm,
+                "total_length_mm": geo.total_length_mm,
+                "nose_shape": geo.nose_shape,
+                "fins": {
+                    "shape": self.cmb_fin_shape.currentText(),
+                    "count": geo.fin_count,
+                    "root_chord_mm": geo.fin_root_chord_mm,
+                    "tip_chord_mm": geo.fin_tip_chord_mm,
+                    "span_mm": geo.fin_span_mm,
+                    "sweep_mm": geo.fin_sweep_mm,
+                },
+            },
+            "mass": {
+                "total_g": total_g,
+                "body_g": self.sp_body_mass.value(),
+                "engine_g": engine_g,
+                "propellant_g": propellant_g,
+                "nose_g": self.sp_nose_mass.value(),
+                "chute_g": self.sp_chute_mass.value(),
+                "chute_diameter_m": self.sp_chute_diameter.value() / 100.0,
+                "fin_each_g": self.sp_fin_mass.value(),
+                "items": [
+                    {"name": item.name, "mass_g": item.mass_g,
+                     "x_from_nose_mm": item.x_from_nose_mm}
+                    for item in items
+                ],
+            },
+            "stability": {
+                "cg_from_nose_mm": res.x_cg_mm,
+                "cp_from_nose_mm": res.x_cp_mm,
+                "margin_calibers": res.margin_calibers,
+                "cn_total": res.cn_total,
+                "cn_nose": res.cn_nose,
+                "cn_fins": res.cn_fins,
+                "verdict": res.verdict,
+                "measured_cg": self.chk_meas.isChecked(),
+            },
+            "nozzle": {
+                "throat_diameter_mm": self.sp_throat.value(),
+                "exit_diameter_mm": self.sp_exit.value(),
+                "convergent_angle_deg": self.sp_conv_angle.value(),
+                "divergent_angle_deg": self.sp_div_angle.value(),
+                "length_cm": self.sp_nozzle_len.value(),
+                "chamber_pressure_bar": self.sp_chamber_p.value(),
+            },
+        }
+
+    def transfer_to_station(self):
+        """ارسال اتمی طرح به ایستگاه و بازگشت از پنجرهٔ طراح."""
+        try:
+            path = write_design_transfer(self.export_design_payload())
+        except (OSError, TypeError, ValueError) as exc:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "انتقال طرح", f"طرح به ایستگاه ارسال نشد:\n{exc}")
+            return False
+        self.btn_transfer.setText("✅ طرح به ایستگاه رسید")
+        self.btn_transfer.setEnabled(False)
+        # فایل در صورت بسته‌بودن ایستگاه هم باقی می‌ماند؛ در اجرای عادی،
+        # تایمر ایستگاه در همین فاصله آن را می‌خواند و پنجرهٔ فعلی بسته می‌شود.
+        QTimer.singleShot(450, self.close)
+        return path
 
     def save_json(self):
         path, _ = QFileDialog.getSaveFileName(
@@ -845,6 +976,7 @@ class DesignerWindow(QWidget):
             return
         data = {"shape": self.cmb_shape.currentText(),
                 "fin_count": self.cmb_fin_n.currentText(),
+                "fin_shape": self.cmb_fin_shape.currentText(),
                 "measured": self.chk_meas.isChecked(),
                 "meas_cg": self.sp_meas.value()}
         for f in self._FIELDS:
@@ -869,6 +1001,7 @@ class DesignerWindow(QWidget):
             return
         self.cmb_shape.setCurrentText(data.get("shape", "اویو"))
         self.cmb_fin_n.setCurrentText(str(data.get("fin_count", "4")))
+        self.cmb_fin_shape.setCurrentText(data.get("fin_shape", "ذوزنقه‌ای"))
         self.chk_meas.setChecked(bool(data.get("measured", False)))
         self.sp_meas.setValue(float(data.get("meas_cg", 40)))
         for f in self._FIELDS:

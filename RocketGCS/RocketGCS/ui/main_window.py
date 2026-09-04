@@ -18,6 +18,7 @@ from ui.widgets import PageNavBar, TopStatusBar
 from core.data_manager import data_manager
 from core.version import APP_VERSION, APP_NAME
 from core.jalali import gregorian_date_to_jalali_str
+from core.design_transfer import read_design_transfer, remove_design_transfer
 from pages.dashboard import DashboardPage
 from pages.hud_dashboard import HudDashboardPage
 from pages.mission import MissionPage
@@ -175,6 +176,16 @@ class MainWindow(QMainWindow):
         data_manager.navigate_requested.connect(self._on_navigate_requested)
         data_manager.telemetry_saved.connect(self._on_telemetry_saved)
 
+        # RocketDesigner در یک پردازش جدا اجرا می‌شود. صف JSON مشترک را
+        # مرتب بررسی می‌کنیم تا دکمهٔ «ارسال به ایستگاه» نیاز به اتصال شبکه یا
+        # اجرای دوبارهٔ ایستگاه نداشته باشد.
+        self._last_design_transfer_id = ""
+        self._design_transfer_timer = QTimer(self)
+        self._design_transfer_timer.setInterval(350)
+        self._design_transfer_timer.timeout.connect(self._poll_design_transfer)
+        self._design_transfer_timer.start()
+        self._poll_design_transfer()
+
         self._clock_timer = QTimer(self)
         self._clock_timer.timeout.connect(self._tick_clock)
         self._clock_timer.start(1000)
@@ -212,6 +223,35 @@ class MainWindow(QMainWindow):
         x = avail.x() + (avail.width() - w) // 2
         y = avail.y() + (avail.height() - h) // 2
         self.move(x, y)
+
+    def _poll_design_transfer(self):
+        """دریافت طرح کامل طراح، اعمال در مدل مرکزی و رفتن به فرم مأموریت."""
+        transfer = read_design_transfer()
+        if not transfer:
+            return
+        transfer_id, payload = transfer
+        if transfer_id == self._last_design_transfer_id:
+            return
+        if not data_manager.import_design_payload(payload, transfer_id=transfer_id):
+            # فایل خراب را حذف نمی‌کنیم تا کاربر فرصت اصلاح/ارسال دوباره داشته
+            # باشد؛ در poll بعدی همان شناسه دوباره بررسی می‌شود.
+            return
+        self._last_design_transfer_id = transfer_id
+        remove_design_transfer()
+        self._set_current_index(2)
+        self.raise_()
+        self.activateWindow()
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Information)
+        box.setWindowTitle("انتقال طرح راکت")
+        box.setText(
+            "✅ طرح با موفقیت از نرم‌افزار طراحی دریافت شد.\n\n"
+            "هندسهٔ بدنه و باله، جرم‌ها، نقاط CG/CP و مشخصات نازل در "
+            "اطلاعات مأموریت و پیش‌بینی عملکرد اعمال شد.")
+        box.setStandardButtons(QMessageBox.Ok)
+        self._design_import_box = box
+        box.finished.connect(lambda _code: setattr(self, "_design_import_box", None))
+        box.show()
 
     def _on_connection_changed(self, connected: bool):
         self.top_bar.set_connection(connected, data_manager.connection_type)

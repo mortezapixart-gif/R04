@@ -90,6 +90,11 @@ class ReportPage(QWidget):
             f"پروژه: {m.project_number or '--'}   |   نام راکت: {m.rocket_name or '--'}   |   شماره پرواز: {m.flight_number or '--'}",
             f"محل پرتاب: {m.launch_site or '--'}   |   تاریخ: {jalali_date_str}  ساعت: {m.time}",
             f"وزن کل: {m.total_mass} کیلوگرم   |   زاویه پرتاب: {m.launch_angle} درجه",
+            f"هندسه: قطر {m.body_diameter * 1000:.0f} mm، طول {m.body_length * 100:.1f} cm، "
+            f"باله {m.fin_shape} / {m.fin_count or 'پیش‌فرض'} عدد",
+            f"پایداری: CP {m.cp_from_nose * 100:.1f} cm، CG {m.cg_from_nose * 100:.1f} cm، "
+            f"حاشیه {m.stability_margin_calibers:.2f} کالیبر" if m.cp_from_nose and m.cg_from_nose else
+            "پایداری: CP/CG نرمال خودکار در حالت ورود دستی",
             f"نازل: گلوگاه {mo.throat_diameter} mm، خروجی {mo.exit_diameter} mm، طول {mo.nozzle_length} cm",
             "",
             "========== نتایج تحلیل پرواز ==========",

@@ -77,8 +77,24 @@ class MissionInfo:
     motor_mass: float = 0.0            # وزن موتور (گرم)
     propellant_mass: float = 0.0       # وزن سوخت (گرم)
     body_diameter: float = 0.0         # قطر بدنه (m)
-    body_length: float = 0.0           # طول راکت (m)
+    body_length: float = 0.0           # طول کامل راکت (m)
+    body_section_length: float = 0.0   # طول بخش استوانه‌ای (m)، از طراح
+    nose_length: float = 0.0           # طول مخروط سر (m)، از طراح
     nose_cone: str = "اویو"            # شکل مخروط سر: اویو/مخروطی/نیم‌کره/تخت
+    # هندسهٔ باله‌ها (در ورود دستی صفر است؛ در حالت طراحی از طراح می‌آید)
+    fin_shape: str = "ذوزنقه‌ای"
+    fin_count: int = 0
+    fin_root_chord: float = 0.0        # m
+    fin_tip_chord: float = 0.0         # m
+    fin_span: float = 0.0              # m
+    fin_sweep: float = 0.0             # m
+    # نقاط آیرودینامیکی از نوک دماغه (m). None یعنی ورود دستی و استفاده از
+    # مقدار نرمال خودکار در build_preflight_payload.
+    cg_from_nose: Optional[float] = None
+    cp_from_nose: Optional[float] = None
+    stability_margin_calibers: Optional[float] = None
+    design_source: str = "manual"      # manual | designer
+    design_transfer_id: str = ""
     launch_angle: float = 90.0         # زاویه پرتاب (deg)
     chute_diameter_m: float = 0.0      # قطر چتر بازیابی (m) -- ۰ = بدون چتر
 
@@ -117,6 +133,7 @@ class DataManager(QObject):
     navigate_requested = Signal(str)      # برای دکمه‌های «برو به صفحهٔ ...» داخل دیالوگ‌ها (نام صفحه در NAV_ITEMS)
     flight_phase_changed = Signal(str)    # فاز پرواز (کلید FLIGHT_PHASE_INFO) -- تشخیص خودکار از تله‌متری لورا
     telemetry_saved = Signal(str)         # مسیر فایل خام تله‌متری لورا که پس از فرود خودکار ذخیره شد
+    design_imported = Signal(dict)        # طرح کامل دریافت‌شده از RocketDesigner
 
     def __init__(self):
         super().__init__()
@@ -222,29 +239,160 @@ class DataManager(QObject):
             self.prediction_snapshot = None
             QTimer.singleShot(300, self._capture_prediction_snapshot)
 
+    def effective_design_parameters(self) -> dict:
+        """هندسهٔ آیرودینامیکی مؤثر برای هر دو مسیر ورود اطلاعات.
+
+        در مسیر دستی CP/CG فیلد مستقیمی در فرم وجود ندارد. برای جلوگیری از
+        ورود صفر یا رفتار نامعلوم، یک مدل «نرمالِ ۱٫۵ کالیبر» ساخته می‌شود:
+        CP حدود ۶۷٪ طول از نوک و CG به‌اندازهٔ ۱٫۵ قطر جلوتر از آن. این
+        مقدار صریحاً در payload و پیش‌بینی ثبت می‌شود و با انتقال طرح، نقاط
+        واقعی طراح جایگزین آن می‌شوند.
+        """
+        m = self.mission
+        diameter = float(m.body_diameter or 0.08)
+        length = float(m.body_length or 0.0)
+        if length <= 0:
+            length = max(0.6, diameter * 8.0)
+        cp = m.cp_from_nose if m.cp_from_nose is not None and m.cp_from_nose > 0 else length * 0.67
+        normal_margin = 1.5
+        cg_default = max(0.0, cp - normal_margin * diameter)
+        cg = m.cg_from_nose if m.cg_from_nose is not None and m.cg_from_nose > 0 else cg_default
+        margin = (cp - cg) / diameter if diameter > 0 else normal_margin
+        return {
+            "body_diameter_m": diameter,
+            "body_length_m": length,
+            "body_section_length_m": float(m.body_section_length or 0.0),
+            "nose_length_m": float(m.nose_length or 0.0),
+            "fin_shape": m.fin_shape or "ذوزنقه‌ای",
+            "fin_count": int(m.fin_count or 0),
+            "fin_root_chord_m": float(m.fin_root_chord or 0.0),
+            "fin_tip_chord_m": float(m.fin_tip_chord or 0.0),
+            "fin_span_m": float(m.fin_span or 0.0),
+            "fin_sweep_m": float(m.fin_sweep or 0.0),
+            "cp_from_nose_m": cp,
+            "cg_from_nose_m": cg,
+            "stability_margin_calibers": margin,
+            "aero_defaulted": (m.cp_from_nose is None or m.cp_from_nose <= 0
+                               or m.cg_from_nose is None or m.cg_from_nose <= 0),
+            "design_source": m.design_source or "manual",
+        }
+
     def build_preflight_payload(self) -> dict:
-        """محتوای یکسانِ دستور SET_MISSION -- تنها منبع مشترک صفحهٔ ارتباط و
-        دیالوگ کالیبراسیون، تا دو جا از هم جدا نشود. شبیه‌ساز آموزشی هم
-        پارامترهای فیزیکی پرواز را فقط از همین payload می‌خواند."""
+        """محتوای یکسانِ دستور SET_MISSION برای ارتباط، پایش و شبیه‌ساز.
+
+        هندسهٔ کامل طراح (باله‌ها، طول، CP و CG) در همین payload می‌رود.
+        اگر مسیر دستی انتخاب شده باشد، CP/CG نرمال خودکار نیز عمداً ارسال
+        می‌شود تا کامپیوتر پرواز هیچ پارامتر بی‌تعریفی نداشته باشد.
+        """
         m, mo = self.mission, self.motor
+        design = self.effective_design_parameters()
         return {
             "flight_number": m.flight_number,
             "altitude_msl": m.altitude_msl,
             "launch_angle": m.launch_angle,
             "total_mass": m.total_mass,
-            "body_diameter": m.body_diameter,
-            "body_length": m.body_length,
+            "body_diameter": design["body_diameter_m"],
+            "body_length": design["body_length_m"],
+            "body_section_length": design["body_section_length_m"],
+            "nose_length": design["nose_length_m"],
             "nose_cone": m.nose_cone or "اویو",
+            "fin_shape": design["fin_shape"],
             "propellant_mass": m.propellant_mass,
+            "motor_mass": m.motor_mass,
             "chute_diameter": m.chute_diameter_m,
             "burn_time": mo.burn_time,
             "average_thrust": mo.average_thrust,
             "throat_diameter": mo.throat_diameter,
             "exit_diameter": mo.exit_diameter,
-            "chamber_pressure_bar": mo.chamber_pressure_bar,
+            "convergent_angle": mo.convergent_angle,
             "divergence_angle": mo.divergent_angle if mo.divergent_angle > 0 else 15.0,
+            "nozzle_length": mo.nozzle_length,
+            "chamber_pressure_bar": mo.chamber_pressure_bar,
+            "fin_count": design["fin_count"],
+            "fin_root_chord": design["fin_root_chord_m"],
+            "fin_tip_chord": design["fin_tip_chord_m"],
+            "fin_span": design["fin_span_m"],
+            "fin_sweep": design["fin_sweep_m"],
+            "cp_from_nose": design["cp_from_nose_m"],
+            "cg_from_nose": design["cg_from_nose_m"],
+            "stability_margin_calibers": design["stability_margin_calibers"],
+            "aero_defaulted": design["aero_defaulted"],
+            "design_source": design["design_source"],
             "sensor_models": dict(self.sensor_models),
         }
+
+    def import_design_payload(self, payload: dict, transfer_id: str = "") -> bool:
+        """اعمال قرارداد RocketDesigner در مدل مرکزی ایستگاه.
+
+        این متد مستقل از UI است تا انتقال واقعی و تست خودکار هر دو از یک مسیر
+        استفاده کنند. مقادیر دستیِ پرتاب مثل محل/زاویه/قطر چتر حفظ می‌شوند؛
+        همهٔ مواردی که طراح دارد (بدنه، باله، جرم، CG/CP و نازل) جایگزین
+        می‌شوند.
+        """
+        if not isinstance(payload, dict):
+            return False
+        geo = payload.get("geometry") or {}
+        fins = geo.get("fins") or {}
+        mass = payload.get("mass") or {}
+        stability = payload.get("stability") or {}
+        nozzle = payload.get("nozzle") or {}
+
+        def num(value, default=0.0):
+            try:
+                if value is None or value == "":
+                    return float(default)
+                return float(value)
+            except (TypeError, ValueError):
+                return float(default)
+
+        diameter_mm = num(geo.get("body_diameter_mm"))
+        total_length_mm = num(geo.get("total_length_mm"))
+        body_length_mm = num(geo.get("body_length_mm"))
+        nose_length_mm = num(geo.get("nose_length_mm"))
+        total_g = num(mass.get("total_g"))
+        if diameter_mm <= 0 or total_length_mm <= 0 or total_g <= 0:
+            return False
+
+        m, mo = self.mission, self.motor
+        m.body_diameter = diameter_mm / 1000.0
+        m.body_length = total_length_mm / 1000.0
+        m.body_section_length = body_length_mm / 1000.0
+        m.nose_length = nose_length_mm / 1000.0
+        m.nose_cone = str(geo.get("nose_shape") or "اویو")
+        m.fin_shape = str(fins.get("shape") or "ذوزنقه‌ای")
+        m.fin_count = max(0, int(num(fins.get("count"))))
+        m.fin_root_chord = num(fins.get("root_chord_mm")) / 1000.0
+        m.fin_tip_chord = num(fins.get("tip_chord_mm")) / 1000.0
+        m.fin_span = num(fins.get("span_mm")) / 1000.0
+        m.fin_sweep = num(fins.get("sweep_mm")) / 1000.0
+        imported_cp = num(stability.get("cp_from_nose_mm")) / 1000.0
+        imported_cg = num(stability.get("cg_from_nose_mm")) / 1000.0
+        m.cp_from_nose = imported_cp if imported_cp > 0 else None
+        m.cg_from_nose = imported_cg if imported_cg > 0 else None
+        imported_margin = num(stability.get("margin_calibers"))
+        m.stability_margin_calibers = imported_margin if imported_margin else None
+        m.design_source = "designer"
+        m.design_transfer_id = transfer_id
+        m.total_mass = total_g / 1000.0
+        m.motor_mass = num(mass.get("engine_g"))
+        imported_propellant = num(mass.get("propellant_g"))
+        if imported_propellant > 0:
+            m.propellant_mass = min(imported_propellant, max(0.0, total_g - 1.0))
+        if "chute_diameter_m" in mass:
+            m.chute_diameter_m = max(0.0, num(mass.get("chute_diameter_m")))
+
+        mo.throat_diameter = num(nozzle.get("throat_diameter_mm"))
+        mo.exit_diameter = num(nozzle.get("exit_diameter_mm"))
+        mo.convergent_angle = num(nozzle.get("convergent_angle_deg"))
+        mo.divergent_angle = num(nozzle.get("divergent_angle_deg"))
+        mo.nozzle_length = num(nozzle.get("length_cm"))
+        mo.chamber_pressure_bar = num(nozzle.get("chamber_pressure_bar"), 40.0) or 40.0
+
+        self.refresh_motor_performance()
+        self.mission_changed.emit()
+        self.motor_changed.emit()
+        self.design_imported.emit(dict(payload))
+        return True
 
     def mission_info_complete(self) -> bool:
         """آیا حداقل فیلدهای ضروری اطلاعات مأموریت وارد شده؟ (چک‌لیست

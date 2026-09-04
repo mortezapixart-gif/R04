@@ -293,8 +293,22 @@ class SimParams:
     total_mass_kg: float = 3.2          # وزن کامل پرتاب (بدنه+موتور+سوخت+تجهیزات)
     propellant_mass_g: float = 350.0
     body_diameter_m: float = 0.08
-    body_length_m: float = 0.0          # فقط اطلاعاتی
+    body_length_m: float = 0.0          # طول کامل راکت از نوک تا انتها
+    body_section_length_m: float = 0.0  # بخش استوانه‌ای، از طراحی
+    nose_length_m: float = 0.0
     nose_cone: str = "اویو"             # شکل مخروط سر -- ضریب Cd در NOSE_CD_FACTOR
+    # هندسهٔ باله و نقاط آیرودینامیکی؛ صفر/None یعنی مدل دستی با پیش‌فرض نرمال
+    fin_shape: str = "ذوزنقه‌ای"
+    fin_count: int = 0
+    fin_root_chord_m: float = 0.0
+    fin_tip_chord_m: float = 0.0
+    fin_span_m: float = 0.0
+    fin_sweep_m: float = 0.0
+    cp_from_nose_m: Optional[float] = None
+    cg_from_nose_m: Optional[float] = None
+    stability_margin_calibers: Optional[float] = None
+    aero_defaulted: bool = True
+    design_source: str = "manual"
     launch_angle_deg: float = 90.0
     launch_azimuth_deg: float = 0.0   # سمت پرتاب (۰ = شمال، ۹۰ = شرق) -- فقط مسیر GPS/بازپخش
     altitude_msl_m: float = SEMNAN_ELEVATION_M
@@ -392,6 +406,12 @@ def simulate_flight(params: SimParams) -> FlightResult:
             "has_chute": params.chute_diameter_m > 0,
             "range_m": 0.0,
             "liftoff_mass_kg": params.liftoff_mass_kg,
+            "body_length_m": params.body_length_m,
+            "fin_planform_m2": 0.0,
+            "effective_drag_area_m2": 0.0,
+            "cp_from_nose_m": getattr(params, "cp_from_nose_m", None),
+            "cg_from_nose_m": getattr(params, "cg_from_nose_m", None),
+            "stability_margin_calibers": getattr(params, "stability_margin_calibers", None),
             "motor": motor,
         }
         return res
@@ -399,8 +419,52 @@ def simulate_flight(params: SimParams) -> FlightResult:
     m0 = params.liftoff_mass_kg
     mp = max(0.0, params.propellant_mass_g) / 1000.0
     body_area = math.pi / 4.0 * max(params.body_diameter_m, 0.01) ** 2
+    # سطح مؤثر باله‌ها از همان هندسهٔ منتقل‌شده محاسبه می‌شود. در مسیر
+    # دستی صفر است و مدل قدیمیِ فقط-بدنه حفظ می‌شود.
+    fin_shape = str(getattr(params, "fin_shape", "ذوزنقه‌ای") or "ذوزنقه‌ای")
+    root_chord = max(0.0, getattr(params, "fin_root_chord_m", 0.0))
+    tip_chord = max(0.0, getattr(params, "fin_tip_chord_m", 0.0))
+    if fin_shape == "مثلثی":
+        tip_chord = 0.0
+    elif fin_shape == "مستطیلی":
+        tip_chord = root_chord
+    fin_planform = (max(0, int(getattr(params, "fin_count", 0)))
+                    * max(0.0, (root_chord + tip_chord) / 2.0)
+                    * max(0.0, getattr(params, "fin_span_m", 0.0)))
+    rocket_length = max(0.0, getattr(params, "body_length_m", 0.0))
+    if rocket_length <= 0:
+        rocket_length = max(0.0, getattr(params, "body_section_length_m", 0.0)) + max(0.0, getattr(params, "nose_length_m", 0.0))
+    slenderness = rocket_length / max(params.body_diameter_m, 0.01)
+    # طول و عقب‌رفتگی باله فقط اطلاعات نمایشی نیستند: سطح خیس‌شدهٔ تقریبی
+    # بدنه و درگ پایهٔ باله را کمی اصلاح می‌کنند.
+    body_length_factor = 1.0 + 0.012 * min(18.0, max(0.0, slenderness - 8.0))
+    sweep_ratio = max(0.0, getattr(params, "fin_sweep_m", 0.0)) / max(root_chord, 0.001)
+    fin_drag_factor = 1.0 + 0.06 * min(2.0, sweep_ratio)
+    aero_area = body_area * body_length_factor + 0.70 * fin_planform * fin_drag_factor
     chute_area = math.pi / 4.0 * max(params.chute_diameter_m, 0.0) ** 2
     angle_rad = math.radians(max(0.0, min(params.launch_angle_deg, 90.0)))
+
+    stability_margin = getattr(params, "stability_margin_calibers", None)
+    if stability_margin is None:
+        cp = getattr(params, "cp_from_nose_m", None)
+        cg = getattr(params, "cg_from_nose_m", None)
+        stability_margin = ((cp - cg) / params.body_diameter_m
+                            if cp is not None and cg is not None and params.body_diameter_m > 0
+                            else 1.5)
+    if stability_margin < 0:
+        res.warnings.append(
+            f"هشدار پایداری: حاشیه {stability_margin:.2f} کالیبر و CP جلوتر از CG است؛ "
+            "پیش‌بینی مسیر برای پرواز پایدار معتبر نیست.")
+    elif stability_margin < 1.0:
+        res.warnings.append(
+            f"حاشیهٔ پایداری فقط {stability_margin:.2f} کالیبر است؛ باد و تلاطم می‌تواند مسیر را منحرف کند.")
+    elif stability_margin > 2.5:
+        res.warnings.append(
+            f"حاشیهٔ پایداری {stability_margin:.2f} کالیبر است؛ راکت بیش‌پایدار و در باد حساس‌تر است.")
+    # ناپایداری/حاشیهٔ خیلی کم، افزایش کوچکی در درگ ناشی از انحراف بدنه
+    # دارد؛ این تنها اصلاح مسیر مدل ساده است و مقدار هندسی CP/CG نیز در
+    # هشدار و خلاصهٔ پیش‌بینی ثبت می‌شود.
+    stability_drag_factor = 1.0 + max(0.0, 0.6 - stability_margin) * 0.08
 
     # باد افقی ثابت: در درگ به‌صورت سرعت نسبی هوا وارد می‌شود
     # (v_rel = v − v_wind) تا راکت زیر چتر به سرعت باد میل کند.
@@ -449,10 +513,10 @@ def simulate_flight(params: SimParams) -> FlightResult:
             # انتگرال‌گیری، ضربهٔ غیرواقعی ده‌ها g می‌ساخت که سنسور واقعی
             # (نمونه‌برداری ۱۰ هرتز) هرگز نمی‌بیند (ممیزی 1405-06-12).
             inflate = min(1.0, (t - chute_t) / CHUTE_INFLATE_SEC)
-            drag_area = body_area + inflate * chute_area
+            drag_area = aero_area + inflate * chute_area
             drag_cd = CHUTE_CD
         else:
-            drag_area, drag_cd = body_area, BODY_CD * nose_factor
+            drag_area, drag_cd = aero_area, BODY_CD * nose_factor * stability_drag_factor
         # درگ روی سرعت نسبی نسبت به هوا (باد افقی). بدون این، باد به‌صورت
         # شتاب ثابت سرعت افقی را بی‌کران زیاد می‌کرد.
         vrx, vry = vx - wind_x, vy
@@ -605,6 +669,12 @@ def simulate_flight(params: SimParams) -> FlightResult:
         "has_chute": params.chute_diameter_m > 0,
         "range_m": abs(x),
         "liftoff_mass_kg": params.liftoff_mass_kg,
+        "body_length_m": params.body_length_m,
+        "fin_planform_m2": fin_planform,
+        "effective_drag_area_m2": aero_area,
+        "cp_from_nose_m": getattr(params, "cp_from_nose_m", None),
+        "cg_from_nose_m": getattr(params, "cg_from_nose_m", None),
+        "stability_margin_calibers": stability_margin,
         "motor": motor,
     }
     return res
@@ -753,7 +823,20 @@ class RocketFlightSimulator:
             # باید همیشه یک عدد بدهند (ممیزی 1405-06-12).
             body_diameter_m=num("body_diameter", 0.08) or 0.08,
             body_length_m=num("body_length", 0.0),
+            body_section_length_m=num("body_section_length", 0.0),
+            nose_length_m=num("nose_length", 0.0),
             nose_cone=str(p.get("nose_cone") or "اویو"),
+            fin_shape=str(p.get("fin_shape") or "ذوزنقه‌ای"),
+            fin_count=int(num("fin_count", 0)),
+            fin_root_chord_m=num("fin_root_chord", 0.0),
+            fin_tip_chord_m=num("fin_tip_chord", 0.0),
+            fin_span_m=num("fin_span", 0.0),
+            fin_sweep_m=num("fin_sweep", 0.0),
+            cp_from_nose_m=num("cp_from_nose", 0.0) if p.get("cp_from_nose") not in (None, "") else None,
+            cg_from_nose_m=num("cg_from_nose", 0.0) if p.get("cg_from_nose") not in (None, "") else None,
+            stability_margin_calibers=num("stability_margin_calibers", 1.5),
+            aero_defaulted=bool(p.get("aero_defaulted", False)),
+            design_source=str(p.get("design_source") or "manual"),
             launch_angle_deg=num("launch_angle", 90.0),
             launch_azimuth_deg=num("launch_azimuth", 0.0),
             altitude_msl_m=num("altitude_msl", SEMNAN_ELEVATION_M),

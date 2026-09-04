@@ -55,11 +55,31 @@ def build_sim_params(mission, motor, sensor_models: Optional[Dict[str, str]] = N
             launch_angle = float(ang)
         except (TypeError, ValueError):
             launch_angle = 90.0
+    body_diameter = (getattr(mission, "body_diameter", 0.0) or 0.0) or SimParams.body_diameter_m
+    cp = getattr(mission, "cp_from_nose", None)
+    cg = getattr(mission, "cg_from_nose", None)
+    if cp is None or cg is None:
+        length = (getattr(mission, "body_length", 0.0) or 0.0) or max(0.6, body_diameter * 8.0)
+        cp = length * 0.67 if cp is None else cp
+        cg = max(0.0, cp - 1.5 * body_diameter) if cg is None else cg
     return SimParams(
         total_mass_kg=float(getattr(mission, "total_mass", 0.0) or 0.0),
         propellant_mass_g=float(getattr(mission, "propellant_mass", 0.0) or 0.0),
-        body_diameter_m=(getattr(mission, "body_diameter", 0.0) or 0.0) or SimParams.body_diameter_m,
+        body_diameter_m=body_diameter,
+        body_length_m=(getattr(mission, "body_length", 0.0) or 0.0),
+        body_section_length_m=(getattr(mission, "body_section_length", 0.0) or 0.0),
+        nose_length_m=(getattr(mission, "nose_length", 0.0) or 0.0),
         nose_cone=str(getattr(mission, "nose_cone", None) or "اویو"),
+        fin_shape=str(getattr(mission, "fin_shape", "ذوزنقه‌ای") or "ذوزنقه‌ای"),
+        fin_count=int(getattr(mission, "fin_count", 0) or 0),
+        fin_root_chord_m=float(getattr(mission, "fin_root_chord", 0.0) or 0.0),
+        fin_tip_chord_m=float(getattr(mission, "fin_tip_chord", 0.0) or 0.0),
+        fin_span_m=float(getattr(mission, "fin_span", 0.0) or 0.0),
+        fin_sweep_m=float(getattr(mission, "fin_sweep", 0.0) or 0.0),
+        cp_from_nose_m=cp,
+        cg_from_nose_m=cg,
+        stability_margin_calibers=getattr(mission, "stability_margin_calibers", None),
+        design_source=str(getattr(mission, "design_source", "manual") or "manual"),
         launch_angle_deg=launch_angle,
         altitude_msl_m=(alt if alt is not None else SEMNAN_ELEVATION_M) if alt != "" else 0.0,
         throat_diameter_mm=(getattr(motor, "throat_diameter", 0.0) or 0.0) or SimParams.throat_diameter_mm,

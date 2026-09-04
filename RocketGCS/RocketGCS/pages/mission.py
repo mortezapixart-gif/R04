@@ -78,6 +78,7 @@ class MissionPage(QWidget):
         self.total_mass = _ltr_spin(QDoubleSpinBox()); self.total_mass.setRange(0, 500); self.total_mass.setSuffix(" kg"); self.total_mass.setDecimals(1)
         self.propellant_mass = _ltr_spin(QDoubleSpinBox()); self.propellant_mass.setRange(0, 20000); self.propellant_mass.setSuffix(" g"); self.propellant_mass.setDecimals(1)
         self.body_diam = _ltr_spin(QDoubleSpinBox()); self.body_diam.setRange(20, 300); self.body_diam.setDecimals(0); self.body_diam.setSuffix(" mm"); self.body_diam.setValue(80)
+        self.body_length = _ltr_spin(QDoubleSpinBox()); self.body_length.setRange(1, 2000); self.body_length.setDecimals(1); self.body_length.setSuffix(" cm"); self.body_length.setValue(60)
         self.nose_cone = QComboBox(); self.nose_cone.addItems(["اویو", "مخروطی", "نیم‌کره", "تخت"])
         self.launch_angle = _ltr_spin(QDoubleSpinBox()); self.launch_angle.setRange(0, 90); self.launch_angle.setSuffix("°"); self.launch_angle.setValue(90)
         self.chute_d = _ltr_spin(QDoubleSpinBox()); self.chute_d.setRange(0, 8); self.chute_d.setSuffix(" m"); self.chute_d.setDecimals(2)
@@ -113,13 +114,15 @@ class MissionPage(QWidget):
               "بیرونی‌ترین قطر بدنهٔ راکت (بدون باله) بر حسب میلی‌متر. قطر بزرگ‌تر یعنی\n"
               "مقاومت هوا (درگ) بیشتر، فشار دینامیکی بیشتر و اوج کمتر -- ولی جا برای\n"
               "ماژول‌ها و چتر بیشتر. این عدد مستقیماً در شبیه‌سازی و پیش‌بینی اثر می‌گذارد."),
-             ("قطر چتر بازیابی:", self.chute_d,
+             ("طول کامل راکت:", self.body_length,
+              "طول کامل راکت از نوک دماغه تا انتهای موتور. اگر طرحی از طراح راکت\n"
+              "دریافت شود، این مقدار خودکار از همان طرح پر می‌شود.")],
+            [("قطر چتر بازیابی:", self.chute_d,
               "قطر چتر بازیابی (متر). هرچه چتر بزرگ‌تر باشد سرعت فرود کمتر و فرود نرم‌تر است،\n"
               "ولی راکت بیشتر با باد جابه‌جا می‌شود. مقدار صفر یعنی بدون چتر (در شبیه‌ساز\n"
-              "آموزشی، راکت با سرعت خیلی بالا سقوط می‌کند!)")],
-            [("زاویه پرتاب:", self.launch_angle,
-              "زاویهٔ پرتاب نسبت به افق: ۹۰ درجه یعنی کاملاً عمودی. راکت‌ها معمولاً کمی کمتر از ۹۰ "
-              "درجه پرتاب می‌شوند تا در مسیر باد، بیش‌ازحد به سمت محل پرتاب برنگردند.")],
+              "آموزشی، راکت با سرعت خیلی بالا سقوط می‌کند!)"),
+             ("زاویه پرتاب:", self.launch_angle,
+              "زاویه پرتاب نسبت به افق: ۹۰ درجه یعنی کاملاً عمودی.")],
                 ]
 
         mission_col = QVBoxLayout()
@@ -128,6 +131,17 @@ class MissionPage(QWidget):
         mission_card = _tight_card(form_grid(mission_rows))
         mission_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         mission_col.addWidget(mission_card)
+        self.design_status_lbl = QLabel("")
+        self.design_status_lbl.setWordWrap(True)
+        self.design_status_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.design_status_lbl.setStyleSheet(
+            "color:#8fd8ff; background:rgba(45, 120, 180, 0.12); "
+            "border:1px solid rgba(100, 190, 255, 0.28); border-radius:8px; padding:6px;")
+        mission_col.addWidget(self.design_status_lbl)
+        self.manual_mode_btn = QPushButton("ورود دستی؛ حذف هندسهٔ دریافت‌شده")
+        self.manual_mode_btn.clicked.connect(self._switch_to_manual_mode)
+        self.manual_mode_btn.setVisible(False)
+        mission_col.addWidget(self.manual_mode_btn)
         mission_wrap = QWidget()
         mission_wrap.setLayout(mission_col)
 
@@ -337,7 +351,7 @@ class MissionPage(QWidget):
             w.valueChanged.connect(self._update_nozzle_length_note)
         # پیش‌بینی زندهٔ عملکرد: با تغییر هر پارامتر فیزیکی دوباره محاسبه می‌شود
         for w in (self.total_mass, self.propellant_mass, self.altitude_msl,
-                  self.launch_angle, self.chute_d, self.body_diam,
+                  self.launch_angle, self.chute_d, self.body_diam, self.body_length,
                   self.throat_d, self.exit_d, self.chamber_p, self.div_angle):
             w.valueChanged.connect(self._update_prediction)
         self.nose_cone.currentIndexChanged.connect(self._update_prediction)
@@ -349,12 +363,41 @@ class MissionPage(QWidget):
         self._update_nozzle_length_note()
         self._load_from_data_manager()
         self._update_prediction()
+        self._update_design_status()
+
+    def _switch_to_manual_mode(self):
+        m = data_manager.mission
+        m.design_source = "manual"
+        m.design_transfer_id = ""
+        m.body_section_length = 0.0
+        m.nose_length = 0.0
+        m.fin_shape = "ذوزنقه‌ای"
+        m.fin_count = 0
+        m.fin_root_chord = m.fin_tip_chord = m.fin_span = m.fin_sweep = 0.0
+        m.cg_from_nose = None
+        m.cp_from_nose = None
+        m.stability_margin_calibers = None
+        data_manager.mission_changed.emit()
+        self._update_design_status()
+
+    def _update_design_status(self):
+        d = data_manager.effective_design_parameters()
+        source = "طرح دریافت‌شده از طراح راکت" if d["design_source"] == "designer" else "ورود دستی"
+        self.manual_mode_btn.setVisible(d["design_source"] == "designer")
+        fallback = " (CP/CG نرمال خودکار؛ در فرم دستی پارامتر مستقیمی ندارد)" if d["aero_defaulted"] else ""
+        fins = d["fin_count"] or "پیش‌فرض"
+        self.design_status_lbl.setText(
+            f"منبع هندسه: {source}{fallback}\n"
+            f"باله: {d['fin_shape']}، {fins} عدد  |  CP: {d['cp_from_nose_m'] * 100:.1f} cm  |  "
+            f"CG: {d['cg_from_nose_m'] * 100:.1f} cm  |  "
+            f"حاشیه: {d['stability_margin_calibers']:.2f} کالیبر")
 
     def _on_external_data_changed(self, *_):
         """هماهنگ‌سازی با تغییراتی که جای دیگر برنامه اعمال شده -- مثلاً پرشدن
         خودکار پیش‌فرض‌های حالت آموزشی هنگام اتصال به پورت فرضی."""
         self._load_from_data_manager()
         self._update_prediction()
+        self._update_design_status()
 
     # ------------------------------------------------------------------
     def _wrap(self, layout):
@@ -378,6 +421,7 @@ class MissionPage(QWidget):
         self.total_mass.setValue(m.total_mass)
         self.propellant_mass.setValue(m.propellant_mass)
         self.body_diam.setValue(round((m.body_diameter or 0.08) * 1000))
+        self.body_length.setValue((m.body_length or 0.60) * 100.0)
         self.nose_cone.setCurrentText(m.nose_cone or "اویو")
         self.launch_angle.setValue(m.launch_angle or 90)
         self.chute_d.setValue(m.chute_diameter_m)
@@ -425,6 +469,7 @@ class MissionPage(QWidget):
             total_mass=self.total_mass.value(),
             propellant_mass=self.propellant_mass.value(), launch_angle=self.launch_angle.value(),
             body_diameter=self.body_diam.value() / 1000.0,
+            body_length=self.body_length.value() / 100.0,
             nose_cone=self.nose_cone.currentText(),
             chute_diameter_m=self.chute_d.value(),
         )
@@ -501,11 +546,34 @@ class MissionPage(QWidget):
         """شبیه‌سازی زندهٔ عملکرد با پارامترهای فعلی فرم -- آموزش فیزیک راکت:
         هر تغییری در سوخت/وزن/زاویه/نازل/چتر فوراً نتیجه می‌دهد."""
         m = data_manager.mission
+        design = data_manager.effective_design_parameters()
+        # تا پیش از خروج از صفحه، ورودی دستیِ تازه هم باید همان لحظه در
+        # پیش‌بینی CP/CG نرمال را جابه‌جا کند؛ فرم در پایان خودکار ذخیره می‌شود.
+        if design["design_source"] != "designer":
+            design["body_diameter_m"] = self.body_diam.value() / 1000.0
+            design["body_length_m"] = self.body_length.value() / 100.0
+            design["cp_from_nose_m"] = design["body_length_m"] * 0.67
+            design["cg_from_nose_m"] = max(0.0, design["cp_from_nose_m"] - 1.5 * design["body_diameter_m"])
+            design["stability_margin_calibers"] = 1.5
         params = SimParams(
             total_mass_kg=self.total_mass.value() or m.total_mass,
             propellant_mass_g=self.propellant_mass.value(),
             body_diameter_m=self.body_diam.value() / 1000.0,
+            body_length_m=self.body_length.value() / 100.0,
+            body_section_length_m=design["body_section_length_m"],
+            nose_length_m=design["nose_length_m"],
             nose_cone=self.nose_cone.currentText(),
+            fin_shape=design["fin_shape"],
+            fin_count=design["fin_count"],
+            fin_root_chord_m=design["fin_root_chord_m"],
+            fin_tip_chord_m=design["fin_tip_chord_m"],
+            fin_span_m=design["fin_span_m"],
+            fin_sweep_m=design["fin_sweep_m"],
+            cp_from_nose_m=design["cp_from_nose_m"],
+            cg_from_nose_m=design["cg_from_nose_m"],
+            stability_margin_calibers=design["stability_margin_calibers"],
+            aero_defaulted=design["aero_defaulted"],
+            design_source=design["design_source"],
             divergence_angle_deg=self.div_angle.value() or 15.0,
             launch_angle_deg=self.launch_angle.value(),
             altitude_msl_m=self.altitude_msl.value(),
