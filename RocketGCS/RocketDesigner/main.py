@@ -19,11 +19,26 @@ sys.path.insert(0, os.path.join(ROOT, "RocketGCS"))   # فیزیک + پوسته�
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))  # blueprint/window
 
 from PySide6.QtCore import Qt  # noqa: E402
-from PySide6.QtGui import QColor, QFont, QPalette  # noqa: E402
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QPalette  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
+from core.paths import asset_path  # noqa: E402
 from ui.style import APP_FONT_FAMILY  # noqa: E402  (فونت مشترک: شبنم)
 from window import DesignerWindow  # noqa: E402
+
+# همهٔ وزن‌های شبنم همراه برنامه ثبت می‌شوند تا حتی بدون نصب فونت روی سیستم
+# کاربر، همهٔ متن‌ها (برچسب‌ها، دکمه‌ها، لیست کشویی، بوم) شبنم باشند
+_SHABNAM_FILES = ["Shabnam.ttf", "Shabnam-Bold.ttf", "Shabnam-Light.ttf",
+                  "Shabnam-Medium.ttf", "Shabnam-Thin.ttf"]
+
+
+def load_fonts() -> bool:
+    loaded = False
+    for name in _SHABNAM_FILES:
+        path = asset_path(name)
+        if os.path.exists(path) and QFontDatabase.addApplicationFont(path) != -1:
+            loaded = True
+    return loaded
 
 
 def main() -> int:
@@ -31,6 +46,7 @@ def main() -> int:
     app.setLayoutDirection(Qt.RightToLeft)
     # Fusion + شبنم؛ پوستهٔ شاد اختصاصی طراح در window.py اعمال می‌شود
     app.setStyle("Fusion")
+    load_fonts()
     # فونت سراسری: سری شبنم
     font = QFont("Shabnam", 10)
     font.setStyleHint(QFont.SansSerif)

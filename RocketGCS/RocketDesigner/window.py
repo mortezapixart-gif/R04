@@ -19,8 +19,8 @@ import os
 import sys
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import (QBrush, QColor, QFont, QLinearGradient, QPainter,
-                           QPainterPath, QPalette, QPen, QPixmap)
+from PySide6.QtGui import (QBrush, QColor, QFont, QGuiApplication, QLinearGradient,
+                           QPainter, QPainterPath, QPalette, QPen, QPixmap)
 from PySide6.QtWidgets import (QAbstractSpinBox, QButtonGroup, QCheckBox, QComboBox,
                                QDoubleSpinBox, QFileDialog, QFrame, QHBoxLayout,
                                QLabel,
@@ -39,18 +39,19 @@ from blueprint import Blueprint, THEME, fa, verdict_color  # noqa: E402
 from gauge import MarginGauge  # noqa: E402
 from guide import build_guide_page  # noqa: E402
 
-FIELD_W = 68                     # عرض فیلد عدد: فقط پیکان‌ها + یک عدد جا بگیرد
-COMBO_W = 92                     # عرض کشویی‌ها (متن + پیکان)
-LABEL_W = 158                    # عرض ستون عنوان‌ها تا همهٔ ردیف‌ها هم‌تراز بمانند
+FIELD_W = 74                     # عرض مشترک همهٔ فیلدها (عدد و کشویی): پیکان‌ها + عدد
+BTN_W = 170                      # عرض یکسان همهٔ دکمه‌ها و نشانِ سربرگ
 FONT_FAMILY = "Shabnam"          # سری فونت سراسری برنامه
 LOGO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 
-C_VERDICT = {"ok": ("#4ade80", "پایدار"),
-             "warn": ("#ffd166", "در مرز -- اصلاح بهتر است"),
-             "danger": ("#fb7185", "ناپایدار -- پرواز ممنوع"),
-             "unstable": ("#fb7185", "ناپایدار -- پرواز ممنوع"),
-             "over": ("#fdba74", "بیش‌پایدار"),
-             "unknown": ("#93a0c4", "در انتظار ورود جرم‌ها")}
+# (رنگ، برچسب کوتاهِ نشان، متن کامل برای tooltip) -- برچسب کوتاه تا سربرگ
+# باریک بماند و پنجره بتواند هم‌اندازهٔ برنامه اصلی باز شود
+C_VERDICT = {"ok": ("#4ade80", "پایدار", "پایدار -- آمادهٔ پرواز"),
+             "warn": ("#ffd166", "در مرز", "در مرز -- اصلاح بهتر است"),
+             "danger": ("#fb7185", "ناپایدار", "ناپایدار -- پرواز ممنوع"),
+             "unstable": ("#fb7185", "ناپایدار", "ناپایدار -- پرواز ممنوع"),
+             "over": ("#fdba74", "بیش‌پایدار", "بیش‌پایدار -- هواروک در باد جانبی"),
+             "unknown": ("#93a0c4", "در انتظار جرم‌ها", "در انتظار ورود جرم‌ها")}
 
 # مرزهای نورِ مشترک همهٔ سطوح شیشه‌ای
 EDGE = "rgba(148, 163, 255, 0.13)"
@@ -91,7 +92,8 @@ QComboBox {{
   background: rgba(9, 14, 30, 0.62);
   border: 1px solid {EDGE};
   border-radius: 9px; padding: 2px 25px 2px 5px; color: {THEME["text"]};
-  min-width: {COMBO_W}px; max-width: {COMBO_W}px;
+  font-family: 'Shabnam';
+  min-width: {FIELD_W}px; max-width: {FIELD_W}px;
   min-height: 18px; max-height: 20px;
   selection-background-color: {_rgba(THEME["neon_jade"], 80)};
   selection-color: #eafffa; }}
@@ -124,23 +126,36 @@ QCheckBox::indicator:checked {{
       stop:0 {_rgba(THEME["neon_jade"], 230)}, stop:1 {_rgba(THEME["neon_cyber"], 210)});
   border: 1px solid {_rgba(THEME["neon_jade"], 200)}; }}
 
-/* ---- دکمه‌ها: قرصِ نرم ---- */
+/* ---- دکمه‌ها: قرصِ برجستهٔ شاد ---- */
 QPushButton#ActionBtn {{
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-      stop:0 #86f3dd, stop:1 #5cc9f2);
-  color: #05262b; font-weight: bold; border: none;
-  border-radius: 12px; padding: 9px 20px; }}
+  font-family: 'Shabnam'; font-weight: bold; color: #04262b;
+  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+      stop:0 #b2f5e6, stop:0.45 #6ee7cf, stop:1 #38bdf8);
+  border: 1px solid #0e7a6d;
+  border-top: 1px solid rgba(255, 255, 255, 0.80);
+  border-radius: 12px; padding: 8px 14px; }}
 QPushButton#ActionBtn:hover {{
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-      stop:0 #a7f8e9, stop:1 #7dd8f8); }}
-QPushButton#ActionBtn:pressed {{ background: #38b6a0; }}
+  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+      stop:0 #cffcef, stop:0.45 #8ff0da, stop:1 #5cc9f2); }}
+QPushButton#ActionBtn:pressed {{
+  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+      stop:0 #2fa392, stop:1 #2b8cba);
+  border-top: 1px solid rgba(0, 0, 0, 0.35); }}
 QPushButton#GhostBtn {{
-  background: rgba(255, 255, 255, 0.05); color: {THEME["text"]};
-  border: 1px solid {EDGE_HI}; border-radius: 12px; padding: 9px 20px; }}
+  font-family: 'Shabnam'; font-weight: bold; color: #ffe9f4;
+  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+      stop:0 {_rgba(THEME["pink"], 90)}, stop:1 {_rgba(THEME["purple"], 70)});
+  border: 1px solid {_rgba(THEME["pink"], 130)};
+  border-top: 1px solid rgba(255, 255, 255, 0.40);
+  border-radius: 12px; padding: 8px 14px; }}
 QPushButton#GhostBtn:hover {{
-  background: rgba(255, 255, 255, 0.09); color: #d9fff6;
-  border: 1px solid {_rgba(THEME["neon_jade"], 110)}; }}
-QPushButton#GhostBtn:pressed {{ background: rgba(255, 255, 255, 0.03); }}
+  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+      stop:0 {_rgba(THEME["pink"], 130)}, stop:1 {_rgba(THEME["purple"], 105)});
+  color: #ffffff; }}
+QPushButton#GhostBtn:pressed {{
+  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+      stop:0 {_rgba(THEME["purple"], 90)}, stop:1 {_rgba(THEME["pink"], 60)});
+  border-top: 1px solid rgba(0, 0, 0, 0.35); }}
 
 /* ---- اسکرول: نوار نورِ باریک ---- */
 QScrollArea {{ border: none; }}
@@ -162,18 +177,32 @@ QToolTip {{ background: #131c36; color: {THEME["text"]};
 
 
 def _tab_qss(col: str) -> str:
-    """تبِ قطعه‌ای نرم: خاموش = شیشهٔ بی‌رنگ؛ فعال = شیشهٔ رنگیِ ملایم."""
+    """تبِ قطعه‌ای برجسته: خاموش = شیشهٔ روشن؛ فعال = گرادیان شادِ رنگی."""
     return f"""
     QPushButton {{
-        background: rgba(255, 255, 255, 0.03); color: {THEME["sub"]};
-        border: 1px solid rgba(148, 163, 255, 0.08); border-radius: 10px;
-        padding: 6px 16px; font-weight: bold; font-size: 13px;
+        font-family: 'Shabnam';
+        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+            stop:0 rgba(255, 255, 255, 0.12), stop:1 rgba(255, 255, 255, 0.03));
+        color: {THEME["sub"]};
+        border: 1px solid rgba(148, 163, 255, 0.16);
+        border-top: 1px solid rgba(255, 255, 255, 0.28);
+        border-radius: 12px;
+        padding: 7px 12px; font-weight: bold; font-size: 13px;
     }}
     QPushButton:hover {{ color: {THEME["text"]};
-        background: rgba(255, 255, 255, 0.07); }}
+        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+            stop:0 rgba(255, 255, 255, 0.18), stop:1 rgba(255, 255, 255, 0.06)); }}
     QPushButton:checked {{
-        background: {_rgba(col, 40)}; color: {col};
-        border: 1px solid {_rgba(col, 120)};
+        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+            stop:0 {_rgba(col, 120)}, stop:1 {_rgba(col, 55)});
+        color: #ffffff;
+        border: 1px solid {_rgba(col, 170)};
+        border-top: 1px solid {_rgba(col, 235)};
+    }}
+    QPushButton:pressed {{
+        border-top: 1px solid rgba(0, 0, 0, 0.35);
+        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+            stop:0 {_rgba(col, 60)}, stop:1 {_rgba(col, 110)});
     }}
     """
 
@@ -195,9 +224,10 @@ def _verdict_qss(color: str) -> str:
     fg = "#08131f" if lum > 190 else "#ffffff"
     return (
         "QLabel#VerdictBadge {"
-        f" color: {fg}; background: {_rgba(color, 70)}; font-size: 14px;"
+        f" color: {fg}; background: {_rgba(color, 70)}; font-size: 13px;"
+        f" font-family: 'Shabnam';"
         f" font-weight: bold; border: 1px solid {_rgba(color, 150)};"
-        " border-radius: 12px; padding: 9px 20px; }")
+        " border-radius: 12px; padding: 8px 14px; }")
 
 
 def num(value, unit: str = "", decimals: int = 1) -> str:
@@ -295,7 +325,7 @@ class _ComboArrow(QWidget):
 
 
 class SoftComboBox(QComboBox):
-    """باکس کشویی شیشه‌ای با پدِ پیکان داخلی (بدون هیچ سطح سفید)."""
+    """باکس کشویی شیشه‌ای هم‌اندازهٔ فیلدهای عددی، با متن وسط‌چین و پدِ پیکان."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -303,7 +333,24 @@ class SoftComboBox(QComboBox):
 
     def resizeEvent(self, ev):
         super().resizeEvent(ev)
-        self._arrow.setGeometry(self.width() - 25, 4, 21, self.height() - 8)
+        self._arrow.setGeometry(self.width() - 23, 3, 19, self.height() - 6)
+
+    def paintEvent(self, ev):
+        """نقاشی دستی: قاب شیشه‌ای + متن وسط‌چین (استایل پیش‌فرض چپ/راست می‌چیند)."""
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        r = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        p.setBrush(QBrush(QColor(9, 14, 30, 158)))
+        if self.hasFocus():
+            p.setPen(QPen(QColor(THEME["neon_cyber"]), 1))
+        else:
+            p.setPen(QPen(QColor(148, 163, 255, 33), 1))
+        p.drawRoundedRect(r, 9, 9)
+        p.setPen(QColor(THEME["text"]))
+        p.setFont(QFont(FONT_FAMILY, 10))
+        p.drawText(self.rect().adjusted(2, 0, -24, 0), Qt.AlignCenter,
+                   self.currentText())
+        p.end()
 
 
 class SoftSpinBox(QSpinBox):
@@ -459,27 +506,51 @@ class ParamCard(QFrame):
         self.body = QVBoxLayout()
         self.body.setSpacing(6)
         lay.addLayout(self.body)
+        self._entries: list = []
 
-    def add_row(self, label_text: str, field: QWidget, tooltip: str = ""):
-        """یک سطر: عنوان در ستونِ راست + فیلدِ جمع‌وجور چسبیده به آن.
-
-        نکتهٔ جهت: برای متن فارسی، Qt.AlignRight به‌تنهایی توسط موتور متن نسبت به
-        «جهت پاراگراف» تعبیر می‌شود و نتیجه چپ می‌افتد؛ بنابراین AlignAbsolute
-        اضافه شده تا راست‌چینیِ فیزیکی در همهٔ نسخه‌های Qt قطعی باشد.
-        """
-        row = QHBoxLayout()
-        row.setSpacing(8)
-        lab = QLabel(label_text)
+    def _make_lab(self, txt: str, tip: str) -> QLabel:
+        lab = QLabel(txt + ":")
         lab.setStyleSheet(f"color: {THEME['sub']}; background: transparent;"
                           " border: none; font-size: 12.5px;")
-        lab.setFixedWidth(LABEL_W)
         lab.setAlignment(Qt.AlignRight | Qt.AlignAbsolute | Qt.AlignVCenter)
-        if tooltip:
-            lab.setToolTip(tooltip)
-        row.addWidget(lab)
-        row.addWidget(field)
-        row.addStretch(1)
-        self.body.addLayout(row)
+        if tip:
+            lab.setToolTip(tip)
+        return lab
+
+    def _rebuild_rows(self):
+        """ردیف‌ها را بازسازی می‌کند: در هر سطر دو جفت «عنوان: فیلد» چسبیده به هم
+        با یک فضای خالی میان دو جفت (مطابق خواستهٔ کاربر)."""
+        while self.body.count():
+            it = self.body.takeAt(0)
+            sub = it.layout()
+            if sub is not None:
+                while sub.count():
+                    wit = sub.takeAt(0).widget()
+                    if wit is not None:
+                        wit.setParent(None)
+                sub.deleteLater()
+        for i in range(0, len(self._entries), 2):
+            pair = self._entries[i:i + 2]
+            row = QHBoxLayout()
+            row.setSpacing(5)
+            for j, (txt, field, tip) in enumerate(pair):
+                row.addWidget(self._make_lab(txt, tip))
+                row.addWidget(field)
+                if j == 0 and len(pair) == 2:
+                    row.addStretch(1)
+            if len(pair) == 1:
+                row.addStretch(1)
+            self.body.addLayout(row)
+
+    def add_row(self, label_text: str, field: QWidget, tooltip: str = ""):
+        """ثبت یک جفت عنوان/فیلد؛ چیدمان نهایی دو‌تایی در یک سطر است.
+
+        نکتهٔ جهت: Qt.AlignRight به‌تنهایی برای متن فارسی توسط موتور متن نسبت به
+        «جهت پاراگراف» تعبیر می‌شود و چپ می‌افتد؛ AlignAbsolute راستِ فیزیکی را
+        قطعی می‌کند.
+        """
+        self._entries.append((label_text, field, tooltip))
+        self._rebuild_rows()
 
 
 # ---------------------------------------------------------------------------
@@ -518,7 +589,19 @@ class DesignerWindow(QWidget):
         super().__init__()
         self.setWindowTitle("طراح راکت -- استودیو طراحی پایداری")
         self.setLayoutDirection(Qt.RightToLeft)
-        self.resize(1560, 980)
+        # اندازهٔ آغازین هم‌اندازهٔ برنامهٔ اصلی (RocketGCS): 1280x820 مهارشده به
+        # صفحهٔ نمایش و وسط‌چین -- نه پنجرهٔ غول‌پیکرِ پیشین
+        screen = QGuiApplication.primaryScreen()
+        if screen is None:
+            self.resize(1280, 820)
+        else:
+            avail = screen.availableGeometry()
+            margin = 60
+            w = max(self.minimumWidth(), min(1280, avail.width() - margin))
+            h = max(self.minimumHeight(), min(820, avail.height() - margin))
+            self.resize(w, h)
+            self.move(avail.x() + (avail.width() - w) // 2,
+                      avail.y() + (avail.height() - h) // 2)
         self.setObjectName("DesignerRoot")
         self.setFont(QFont(FONT_FAMILY, 10))
         self.setStyleSheet(
@@ -576,14 +659,17 @@ class DesignerWindow(QWidget):
             btn.setCheckable(True)
             btn.setCursor(Qt.PointingHandCursor)
             btn.setStyleSheet(_tab_qss(col))
+            btn.setFixedWidth(BTN_W)
+            btn.setFixedHeight(36)
             self.tab_group.addButton(btn, i)
             hl.addWidget(btn)
         self.tab_group.button(0).setChecked(True)
         self.tab_group.idClicked.connect(self.tab_stack.setCurrentIndex)
         hl.addStretch(1)
-        self.lbl_verdict = QLabel("در انتظار ورود جرم‌ها")
+        self.lbl_verdict = QLabel("در انتظار جرم‌ها")
         self.lbl_verdict.setObjectName("VerdictBadge")
         self.lbl_verdict.setAlignment(Qt.AlignCenter)
+        self.lbl_verdict.setFixedSize(BTN_W, 36)   # هم‌عرض با دکمه‌های سربرگ
         self.lbl_verdict.setStyleSheet(_verdict_qss(THEME["sub"]))
         hl.addWidget(self.lbl_verdict)
         self.btn_save = QPushButton("ذخیرهٔ طرح")
@@ -592,6 +678,10 @@ class DesignerWindow(QWidget):
         self.btn_open.setObjectName("GhostBtn")
         self.btn_save.setCursor(Qt.PointingHandCursor)
         self.btn_open.setCursor(Qt.PointingHandCursor)
+        # عرض و ارتفاع یکسان با دکمه‌های تب تا سربرگ منظم دیده شود
+        for b in (self.btn_save, self.btn_open):
+            b.setFixedWidth(BTN_W)
+            b.setFixedHeight(36)
         self.btn_save.clicked.connect(self.save_json)
         self.btn_open.clicked.connect(self.open_json)
         hl.addWidget(self.btn_save)
@@ -606,7 +696,8 @@ class DesignerWindow(QWidget):
         # ---- پنل پارامترها (راست) ----
         panel_scroll = QScrollArea()
         panel_scroll.setWidgetResizable(True)
-        panel_scroll.setFixedWidth(300)   # باریک: ردیف‌ها جمع‌وجور شدند
+        panel_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        panel_scroll.setFixedWidth(500)   # دو جفت عنوان/فیلد در هر سطر
         panel = QWidget()
         pv = QVBoxLayout(panel)
         pv.setContentsMargins(2, 2, 6, 2)
@@ -794,17 +885,22 @@ class DesignerWindow(QWidget):
         res = analyze(geo, cg)
         self.blueprint.set_data(geo, res, self.chk_meas.isChecked())
 
-        color, verdict_txt = C_VERDICT[res.verdict]
+        color, verdict_txt, verdict_tip = C_VERDICT[res.verdict]
         self.lbl_verdict.setStyleSheet(_verdict_qss(color))
+        self.lbl_verdict.setToolTip(verdict_tip)
         if res.verdict == "unknown":
             self.lbl_verdict.setText(verdict_txt)
         else:
+            # ترتیب «حکم -- عدد» تا در متن راست‌به‌چپ، علامت منفی عدد نپرد
             self.lbl_verdict.setText(
-                f"حاشیهٔ پایداری {num(res.margin_calibers, 'کالیبر', 2)} -- {verdict_txt}")
+                f"{verdict_txt} -- {num(res.margin_calibers, '', 2)}")
+            self.lbl_verdict.setToolTip(
+                f"حاشیهٔ پایداری {num(res.margin_calibers, 'کالیبر', 2)}"
+                f" -- {verdict_tip}")
 
         self.gauge.set_margin(
             res.margin_calibers, verdict_color(res.verdict),
-            fa(f"{res.margin_calibers:.2f}"))
+            num(res.margin_calibers, "", 2))
 
         d = geo.body_diameter_mm
         self.tbl["cp"].setText(num(res.x_cp_mm / 10.0, "cm"))
@@ -821,7 +917,7 @@ class DesignerWindow(QWidget):
             if span is not None:
                 lines.append(
                     f"دهانهٔ باله را از {num(self.sp_span.value(), 'mm', 0)} به "
-                    f"{num(span, 'mm', 0)} ببرید تا حاشیه به ۱٫۵ کالیبر برسد "
+                    f"{num(span, 'mm', 0)} ببرید تا حاشیه به 1.5 کالیبر برسد "
                     "(وترها ثابت می‌مانند).")
             mn = suggest_nose_mass_g(geo, res.x_cg_mm, m_tot)
             if mn is not None:
@@ -837,7 +933,7 @@ class DesignerWindow(QWidget):
             if span is not None:
                 lines.append(
                     f"دهانهٔ باله را به {num(span, 'mm', 0)} کم کنید تا حاشیه "
-                    "حدود ۲ کالیبر شود و هواروک در باد کمتر شود.")
+                    "حدود 2 کالیبر شود و هواروک در باد کمتر شود.")
             else:
                 lines.append("باله‌ها را کوچک‌تر یا دماغه را سبک‌تر کنید.")
         else:

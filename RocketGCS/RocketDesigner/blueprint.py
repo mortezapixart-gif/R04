@@ -80,7 +80,8 @@ RULER_H = 30
 
 
 def fa(txt) -> str:
-    s = str(txt).translate(FA_DIGITS)
+    """اعداد همیشه انگلیسی (LatIN) -- فقط محافظت از عبارات لاتین در متن فارسی."""
+    s = str(txt)
     try:
         from core.report_text import protect_latin_quantities
         return protect_latin_quantities(s)
@@ -579,15 +580,20 @@ class Blueprint(QWidget):
         y = h - 14
         p.setFont(self._f(9))
         step_cm = 1
-        while step_cm * 10.0 * sc < 34:
-            step_cm = step_cm * 2 if step_cm < 5 else 10
+        # نگهبان: با بدنهٔ خیلی بلند (sc کوچک) این حلقه باید تمام شود؛ حالت
+        # sc<=0 هم هرگز باعث قفل شدن نمی‌شود (اشکال پیشین: else 10 به‌جای *10)
+        if sc > 1e-6:
+            while step_cm * 10.0 * sc < 34 and step_cm < 100000:
+                step_cm = step_cm * 2 if step_cm < 5 else step_cm * 10
+        else:
+            step_cm = 100000
         step_px = step_cm * 10.0 * sc
         label_every = 5 if step_cm <= 2 else 2
         self._soft_pen(p, _rgb(THEME["border"]), 200, 1)
         p.drawLine(QPointF(MARGIN - 8, y), QPointF(w - MARGIN + 8, y))
         i = 0
         x = x_nose
-        while x > MARGIN - 8:
+        while x > MARGIN - 8 and i < 2000 and step_px > 0.5:
             big = (i % label_every == 0)
             col = THEME["teal"] if big else THEME["sub"]
             cc = QColor(col)
