@@ -18,14 +18,14 @@ import json
 import os
 import sys
 
-from PySide6.QtCore import QPointF, QRectF, Qt, Signal, QTimer
+from PySide6.QtCore import QPointF, QRectF, Qt, Signal, QTimer, QLocale
 from PySide6.QtGui import (QBrush, QColor, QFont, QLinearGradient, QPainter,
-                           QPainterPath, QPalette, QPen, QPixmap)
+                           QPainterPath, QPalette, QPen, QPixmap, QGuiApplication)
 from PySide6.QtWidgets import (QAbstractSpinBox, QButtonGroup, QCheckBox, QComboBox,
-                               QDoubleSpinBox, QFileDialog, QFrame, QHBoxLayout,
-                               QLabel,
-                               QPushButton, QScrollArea, QSizePolicy,
-                               QSpinBox, QStackedWidget, QVBoxLayout, QWidget)
+                               QDoubleSpinBox, QFileDialog, QFrame, QGridLayout,
+                               QHBoxLayout, QLabel, QPushButton, QScrollArea,
+                               QSizePolicy, QSpinBox, QStackedWidget,
+                               QVBoxLayout, QWidget)
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                 "RocketGCS"))
@@ -40,8 +40,11 @@ from blueprint import Blueprint, THEME, fa, verdict_color  # noqa: E402
 from gauge import MarginGauge  # noqa: E402
 from guide import build_guide_page  # noqa: E402
 
-FIELD_W = 92
+FIELD_W = 102
+FIELD_H = 30
+COMBO_W = 148
 FONT_FAMILY = "Shabnam"          # سری فونت سراسری برنامه
+EN_LOCALE = QLocale(QLocale.English, QLocale.UnitedStates)
 LOGO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 
 C_VERDICT = {"ok": ("#4ade80", "پایدار"),
@@ -57,7 +60,7 @@ EDGE_HI = "rgba(148, 163, 255, 0.22)"
 
 
 def _rgba(hexcol: str, alpha: int) -> str:
-    """رنگ شفاف برای QSS (آلفای ۰..۲۵۵ → ۰..۱)."""
+    """رنگ شفاف برای QSS (آلفای 0..255 → 0..1)."""
     c = QColor(hexcol)
     return f"rgba({c.red()}, {c.green()}, {c.blue()}, {round(alpha / 255.0, 3)})"
 
@@ -79,12 +82,17 @@ QWidget {{ background: transparent; color: {THEME["text"]};
 
 /* ---- فیلدها: شیشهٔ تیرهٔ نرم ---- */
 QSpinBox, QDoubleSpinBox, QComboBox {{
-  background: rgba(9, 14, 30, 0.62);
-  border: 1px solid {EDGE};
-  border-radius: 10px; padding: 4px 30px 4px 10px; color: {THEME["text"]};
-  min-width: {FIELD_W}px; min-height: 18px; max-height: 18px;
-  selection-background-color: {_rgba(THEME["neon_jade"], 80)};
-  selection-color: #eafffa; }}
+  background: rgba(20, 35, 68, 0.92);
+  border: 1px solid rgba(124, 196, 255, 0.42);
+  border-radius: 10px; padding: 3px 30px 3px 8px; color: {THEME["text"]};
+  min-width: {FIELD_W}px; min-height: {FIELD_H}px; max-height: {FIELD_H}px;
+  selection-background-color: {_rgba(THEME["neon_jade"], 120)};
+  selection-color: #ffffff; }}
+QComboBox {{ min-width: {COMBO_W}px; }}
+QComboBox QLineEdit {{
+  background: transparent; border: none; padding: 0;
+  color: {THEME["text"]}; font-family: 'Shabnam';
+}}
 QSpinBox:focus, QDoubleSpinBox:focus {{
   border: 1px solid {_rgba(THEME["neon_jade"], 150)};
   background: rgba(12, 19, 40, 0.80); }}
@@ -114,23 +122,36 @@ QCheckBox::indicator:checked {{
       stop:0 {_rgba(THEME["neon_jade"], 230)}, stop:1 {_rgba(THEME["neon_cyber"], 210)});
   border: 1px solid {_rgba(THEME["neon_jade"], 200)}; }}
 
-/* ---- دکمه‌ها: قرصِ نرم ---- */
+/* ---- دکمه‌ها: شاد، هم‌اندازه و کمی برجسته ---- */
+QPushButton#ActionBtn, QPushButton#GhostBtn {{
+  min-width: 128px; max-width: 128px; min-height: 34px; max-height: 34px;
+  border-radius: 10px; padding: 5px 10px; font-weight: bold;
+}}
 QPushButton#ActionBtn {{
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-      stop:0 #86f3dd, stop:1 #5cc9f2);
-  color: #05262b; font-weight: bold; border: none;
-  border-radius: 12px; padding: 9px 20px; }}
+  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+      stop:0 #70f2d0, stop:0.55 #35d0ba, stop:1 #1d9f9b);
+  color: #05262b; border: 1px solid #9bffe9;
+  border-bottom: 3px solid #13756f;
+}}
 QPushButton#ActionBtn:hover {{
-  background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-      stop:0 #a7f8e9, stop:1 #7dd8f8); }}
-QPushButton#ActionBtn:pressed {{ background: #38b6a0; }}
+  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+      stop:0 #a3ffe9, stop:0.55 #5eead4, stop:1 #2abdb4); }}
+QPushButton#ActionBtn:pressed {{
+  padding-top: 7px; border-bottom: 1px solid #13756f; background: #2aa99e;
+}}
 QPushButton#GhostBtn {{
-  background: rgba(255, 255, 255, 0.05); color: {THEME["text"]};
-  border: 1px solid {EDGE_HI}; border-radius: 12px; padding: 9px 20px; }}
+  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+      stop:0 #344f87, stop:0.55 #263b6c, stop:1 #1a2a50);
+  color: #e8f4ff; border: 1px solid #76bdf2;
+  border-bottom: 3px solid #162849;
+}}
 QPushButton#GhostBtn:hover {{
-  background: rgba(255, 255, 255, 0.09); color: #d9fff6;
-  border: 1px solid {_rgba(THEME["neon_jade"], 110)}; }}
-QPushButton#GhostBtn:pressed {{ background: rgba(255, 255, 255, 0.03); }}
+  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+      stop:0 #4f76b7, stop:1 #294d83); color: #ffffff;
+  border-color: #a5dcff; }}
+QPushButton#GhostBtn:pressed {{
+  padding-top: 7px; border-bottom: 1px solid #162849; background: #263d70;
+}}
 
 /* ---- اسکرول: نوار نورِ باریک ---- */
 QScrollArea {{ border: none; }}
@@ -155,15 +176,20 @@ def _tab_qss(col: str) -> str:
     """تبِ قطعه‌ای نرم: خاموش = شیشهٔ بی‌رنگ؛ فعال = شیشهٔ رنگیِ ملایم."""
     return f"""
     QPushButton {{
-        background: rgba(255, 255, 255, 0.03); color: {THEME["sub"]};
-        border: 1px solid rgba(148, 163, 255, 0.08); border-radius: 10px;
-        padding: 6px 16px; font-weight: bold; font-size: 13px;
+        min-width: 128px; max-width: 128px; min-height: 34px; max-height: 34px;
+        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+            stop:0 #314d82, stop:1 #1b2c55); color: {THEME["sub"]};
+        border: 1px solid rgba(124, 196, 255, 0.42);
+        border-bottom: 3px solid #142545; border-radius: 10px;
+        padding: 5px 8px; font-weight: bold; font-size: 13px;
     }}
-    QPushButton:hover {{ color: {THEME["text"]};
-        background: rgba(255, 255, 255, 0.07); }}
+    QPushButton:hover {{ color: #ffffff;
+        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+            stop:0 #5079b8, stop:1 #294d83); }}
     QPushButton:checked {{
-        background: {_rgba(col, 40)}; color: {col};
-        border: 1px solid {_rgba(col, 120)};
+        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+            stop:0 {_rgba(col, 220)}, stop:1 {_rgba(col, 120)});
+        color: #061a28; border: 1px solid {col}; border-bottom: 3px solid #1b6478;
     }}
     """
 
@@ -285,10 +311,17 @@ class _ComboArrow(QWidget):
 
 
 class SoftComboBox(QComboBox):
-    """باکس کشویی شیشه‌ای با پدِ پیکان داخلی (بدون هیچ سطح سفید)."""
+    """باکس کشویی عریض‌تر، با متن وسط‌چین و اعداد لاتین."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setLocale(EN_LOCALE)
+        self.setEditable(True)
+        self.setInsertPolicy(QComboBox.NoInsert)
+        self.lineEdit().setReadOnly(True)
+        self.lineEdit().setAlignment(Qt.AlignCenter)
+        self.lineEdit().setLayoutDirection(Qt.LeftToRight)
+        self.setFixedSize(COMBO_W, FIELD_H)
         self._arrow = _ComboArrow(self)
 
     def resizeEvent(self, ev):
@@ -301,8 +334,10 @@ class SoftSpinBox(QSpinBox):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setLocale(EN_LOCALE)
         self.setButtonSymbols(QAbstractSpinBox.NoButtons)
-        self.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.setFixedSize(FIELD_W, FIELD_H)
+        self.setAlignment(Qt.AlignCenter)
         self._pad = _StepPad(self)
         self._pad.up.connect(self.stepUp)
         self._pad.down.connect(self.stepDown)
@@ -317,8 +352,10 @@ class SoftDoubleSpinBox(QDoubleSpinBox):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setLocale(EN_LOCALE)
         self.setButtonSymbols(QAbstractSpinBox.NoButtons)
-        self.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.setFixedSize(FIELD_W, FIELD_H)
+        self.setAlignment(Qt.AlignCenter)
         self._pad = _StepPad(self)
         self._pad.up.connect(self.stepUp)
         self._pad.down.connect(self.stepDown)
@@ -416,9 +453,10 @@ class ParamCard(QFrame):
         self.setObjectName("ParamCard")
         self.setStyleSheet(
             f"QFrame#ParamCard {{ background: qlineargradient(x1:0, y1:0,"
-            f" x2:0, y2:1, stop:0 {_rgba(color, 22)}, stop:0.30 rgba(255,255,255,9),"
-            f" stop:1 rgba(255,255,255,5));"
-            f" border: 1px solid {EDGE}; border-radius: 18px; }}"
+            f" x2:0, y2:1, stop:0 {_rgba(color, 44)}, stop:0.30 rgba(255,255,255,14),"
+            f" stop:1 rgba(255,255,255,9));"
+            f" border: 1px solid {_rgba(color, 78)}; border-bottom: 2px solid {_rgba(color, 120)};"
+            " border-radius: 16px; }"
             "QFrame#ParamCard QLabel { background: transparent; border: none; }")
         lay = QVBoxLayout(self)
         lay.setContentsMargins(12, 10, 12, 11)
@@ -440,29 +478,46 @@ class ParamCard(QFrame):
             f"QFrame#CardDot {{ background: {color}; border: none;"
             f" border-radius: 4px; }}")
         t = QLabel(title)
+        t.setLayoutDirection(Qt.RightToLeft)
+        t.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         t.setStyleSheet(f"color: {color}; font-size: 13.5px; font-weight: bold;"
                         " background: transparent; border: none;")
         head.addWidget(dot)
         head.addWidget(t)
         head.addStretch(1)
         lay.addLayout(head)
-        self.body = QVBoxLayout()
-        self.body.setSpacing(6)
+        # پارامترها در دو ستون قرار می‌گیرند؛ برچسب نزدیکِ فیلد می‌ماند و
+        # کارت‌ها در ارتفاع پنجرهٔ اصلی جا می‌شوند.
+        self.body = QGridLayout()
+        self.body.setContentsMargins(0, 0, 0, 0)
+        self.body.setHorizontalSpacing(9)
+        self.body.setVerticalSpacing(5)
+        self._field_index = 0
         lay.addLayout(self.body)
 
     def add_row(self, label_text: str, field: QWidget, tooltip: str = ""):
-        row = QHBoxLayout()
-        row.setSpacing(6)
+        cell = QWidget()
+        cell.setLayoutDirection(Qt.RightToLeft)
+        cell.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        col = QVBoxLayout(cell)
+        col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(2)
         lab = QLabel(label_text)
+        lab.setTextFormat(Qt.PlainText)
+        lab.setWordWrap(True)
+        lab.setLayoutDirection(Qt.RightToLeft)
         lab.setStyleSheet(f"color: {THEME['sub']}; background: transparent;"
-                          " border: none; font-size: 12.5px;")
+                          " border: none; font-size: 11.5px;")
         lab.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        lab.setMinimumHeight(20)
         if tooltip:
             lab.setToolTip(tooltip)
-        row.addWidget(lab)
-        row.addStretch(1)
-        row.addWidget(field)
-        self.body.addLayout(row)
+        col.addWidget(lab)
+        col.addWidget(field, 0, Qt.AlignRight)
+        row, column = divmod(self._field_index, 2)
+        self.body.addWidget(cell, row, column)
+        self.body.setColumnStretch(column, 1)
+        self._field_index += 1
 
 
 # ---------------------------------------------------------------------------
@@ -501,13 +556,15 @@ class DesignerWindow(QWidget):
         super().__init__()
         self.setWindowTitle("طراح راکت -- استودیو طراحی پایداری")
         self.setLayoutDirection(Qt.RightToLeft)
-        self.resize(1560, 980)
+        # هم‌اندازهٔ اندازهٔ شروع ایستگاه اصلی و در مرکز صفحهٔ کاربر.
+        self.setMinimumSize(1000, 650)
+        self._apply_startup_geometry()
         self.setObjectName("DesignerRoot")
         self.setFont(QFont(FONT_FAMILY, 10))
         self.setStyleSheet(
             "QWidget#DesignerRoot { background: qradialgradient(cx:0.78,"
-            " cy:0.08, radius:1.15, stop:0 #17224a, stop:0.45 #0c1226,"
-            " stop:1 #070b18); }" + DESIGNER_QSS)
+            " cy:0.08, radius:1.15, stop:0 #244c78, stop:0.45 #10264a,"
+            " stop:1 #081127); }" + DESIGNER_QSS)
         # پالتِ دارک برای اجزایی که نقاشیِ سبک (Fusion) دارند (پیکان‌ها و…)
         pal = self.palette()
         pal.setColor(QPalette.Window, QColor("#0c1226"))
@@ -521,15 +578,17 @@ class DesignerWindow(QWidget):
         self.setPalette(pal)
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(16, 14, 16, 14)
-        root.setSpacing(14)
+        root.setContentsMargins(12, 10, 12, 10)
+        root.setSpacing(10)
 
         # ================= هدر =================
         header = QFrame()
         header.setObjectName("HeaderBar")
         header.setStyleSheet(
-            f"QFrame#HeaderBar {{ background: {_glass(12, 4)};"
-            f" border: 1px solid {EDGE}; border-radius: 18px; }}"
+            f"QFrame#HeaderBar {{ background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+            " stop:0 rgba(42, 82, 132, 0.94), stop:1 rgba(19, 42, 82, 0.96));"
+            " border: 1px solid rgba(124, 196, 255, 0.48);"
+            " border-bottom: 2px solid rgba(94, 234, 212, 0.62); border-radius: 14px; }"
             "QFrame#HeaderBar QLabel { background: transparent; border: none; }")
         hl = QHBoxLayout(header)
         hl.setContentsMargins(18, 12, 18, 12)
@@ -537,11 +596,16 @@ class DesignerWindow(QWidget):
         logo = LogoBadge()
         title_box = QVBoxLayout()
         title_box.setSpacing(0)
+        title_box.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         t1 = QLabel("طراح راکت")
+        t1.setLayoutDirection(Qt.RightToLeft)
+        t1.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         t1.setStyleSheet(f"color: {THEME['text']}; font-size: 19px;"
                          " font-weight: 900; background: transparent;"
                          " border: none;")
         t2 = QLabel("استودیو طراحی پارامتری و پایداری")
+        t2.setLayoutDirection(Qt.RightToLeft)
+        t2.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         t2.setStyleSheet(f"color: {THEME['sub']}; font-size: 11.5px;"
                          " background: transparent; border: none;")
         title_box.addWidget(t1)
@@ -558,6 +622,7 @@ class DesignerWindow(QWidget):
             btn = QPushButton(name)
             btn.setCheckable(True)
             btn.setCursor(Qt.PointingHandCursor)
+            btn.setFixedSize(128, 34)
             btn.setStyleSheet(_tab_qss(col))
             self.tab_group.addButton(btn, i)
             hl.addWidget(btn)
@@ -566,6 +631,7 @@ class DesignerWindow(QWidget):
         hl.addStretch(1)
         self.lbl_verdict = QLabel("در انتظار ورود جرم‌ها")
         self.lbl_verdict.setObjectName("VerdictBadge")
+        self.lbl_verdict.setFixedSize(220, 34)
         self.lbl_verdict.setAlignment(Qt.AlignCenter)
         self.lbl_verdict.setStyleSheet(_verdict_qss(THEME["sub"]))
         hl.addWidget(self.lbl_verdict)
@@ -575,6 +641,8 @@ class DesignerWindow(QWidget):
         self.btn_save.setObjectName("ActionBtn")
         self.btn_open.setObjectName("GhostBtn")
         self.btn_transfer.setObjectName("ActionBtn")
+        for button in (self.btn_save, self.btn_open, self.btn_transfer):
+            button.setFixedSize(128, 34)
         self.btn_save.setCursor(Qt.PointingHandCursor)
         self.btn_open.setCursor(Qt.PointingHandCursor)
         self.btn_transfer.setCursor(Qt.PointingHandCursor)
@@ -582,8 +650,8 @@ class DesignerWindow(QWidget):
         self.btn_open.clicked.connect(self.open_json)
         self.btn_transfer.clicked.connect(self.transfer_to_station)
         self.btn_transfer.setToolTip(
-            "تمام هندسه، جرم‌ها، نقاط CG/CP و مشخصات نازل را به ایستگاه بفرست "
-            "و برای استفاده در پایش و پیش‌بینی آماده کن.")
+            "تمام هندسه، جرم‌ها و نقاط CG/CP را به ایستگاه بفرست "
+            "و برای استفاده در پایش و پیش‌بینی آماده کن؛ مشخصات موتور و نازل در خود ایستگاه وارد می‌شود.")
         hl.addWidget(self.btn_save)
         hl.addWidget(self.btn_open)
         hl.addWidget(self.btn_transfer)
@@ -591,13 +659,14 @@ class DesignerWindow(QWidget):
 
         # ================= بدنه: پنل راست + محتوا =================
         body = QHBoxLayout()
-        body.setSpacing(14)
+        body.setSpacing(10)
         root.addLayout(body, 1)
 
         # ---- پنل پارامترها (راست) ----
         panel_scroll = QScrollArea()
         panel_scroll.setWidgetResizable(True)
-        panel_scroll.setFixedWidth(340)
+        panel_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        panel_scroll.setFixedWidth(390)
         panel = QWidget()
         pv = QVBoxLayout(panel)
         pv.setContentsMargins(2, 2, 6, 2)
@@ -664,6 +733,7 @@ class DesignerWindow(QWidget):
         # کارت اندازه‌گیری (آبی)
         card4 = ParamCard("اندازه‌گیری CG", THEME["blue"])
         self.chk_meas = QCheckBox("CG اندازه‌گیری‌شده دارم")
+        self.chk_meas.setLayoutDirection(Qt.RightToLeft)
         self.chk_meas.setToolTip("نتیجهٔ آزمون موازنه/رشته (تب راهنما) را جایگزین محاسبهٔ جرمی کن")
         self.sp_meas = SoftDoubleSpinBox()
         self.sp_meas.setRange(2, 300)
@@ -672,26 +742,13 @@ class DesignerWindow(QWidget):
         self.sp_meas.setAlignment(Qt.AlignCenter)
         self.sp_meas.setEnabled(False)
         self.chk_meas.toggled.connect(self.sp_meas.setEnabled)
-        card4.body.addWidget(self.chk_meas)
+        card4.body.addWidget(self.chk_meas, 0, 0, 1, 2)
+        card4._field_index = 2
         card4.add_row("فاصلهٔ CG از نوک (cm)", self.sp_meas)
         pv.addWidget(card4)
 
-        # کارت نازل: اختیاری است، اما اگر در طراحی پر شده باشد همراه هندسه و
-        # جرم‌ها به ایستگاه می‌رود و دیگر لازم نیست همان اعداد دوباره تایپ شوند.
-        card5 = ParamCard("موتور و نازل (برای انتقال)", THEME["yellow"])
-        self.sp_throat = _spin(0, 500, 8)
-        self.sp_exit = _spin(0, 1000, 20)
-        self.sp_conv_angle = _spin(0, 90, 45)
-        self.sp_div_angle = _spin(0, 90, 15)
-        self.sp_nozzle_len = _spin(0, 100, 3, step=1)
-        self.sp_chamber_p = _spin(1, 300, 40)
-        card5.add_row("قطر گلوگاه (mm)", self.sp_throat)
-        card5.add_row("قطر خروجی (mm)", self.sp_exit)
-        card5.add_row("زاویه همگرا (درجه)", self.sp_conv_angle)
-        card5.add_row("زاویه واگرا (درجه)", self.sp_div_angle)
-        card5.add_row("طول نازل (cm)", self.sp_nozzle_len)
-        card5.add_row("فشار محفظه (bar)", self.sp_chamber_p)
-        pv.addWidget(card5)
+        # مشخصات موتور و نازل عمداً در این پنجره نیست؛ این اطلاعات در صفحهٔ
+        # «اطلاعات مأموریت و نازل» ایستگاه اصلی وارد می‌شود تا یک منبع واحد داشته باشد.
         pv.addStretch(1)
         panel_scroll.setWidget(panel)
         body.addWidget(panel_scroll)
@@ -702,13 +759,13 @@ class DesignerWindow(QWidget):
         body.addLayout(content, 1)
 
 
-        # --- صفحهٔ ۰: بوم + گیج + چیپ‌ها + پیشنهاد ---
+        # --- صفحهٔ 0: بوم + گیج + چیپ‌ها + پیشنهاد ---
         page0 = QWidget()
         p0 = QVBoxLayout(page0)
         p0.setContentsMargins(0, 0, 0, 0)
         p0.setSpacing(12)
         self.blueprint = Blueprint()
-        self.blueprint.setFixedHeight(430)   # کاملاً قفل: با تغییر اعداد تکان نمی‌خورد
+        self.blueprint.setFixedHeight(350)   # مناسبِ اندازهٔ شروع ایستگاه اصلی
         p0.addWidget(self.blueprint)
         self.gauge = MarginGauge()
         self.gauge.setFixedHeight(84)
@@ -755,9 +812,6 @@ class DesignerWindow(QWidget):
             (self.sp_engine_pos, "sp_engine_pos"), (self.sp_chute_mass, "sp_chute_mass"),
             (self.sp_chute_diameter, "sp_chute_diameter"),
             (self.sp_chute_pos, "sp_chute_pos"), (self.sp_meas, "chk_meas"),
-            (self.sp_throat, "sp_throat"), (self.sp_exit, "sp_exit"),
-            (self.sp_conv_angle, "sp_conv_angle"), (self.sp_div_angle, "sp_div_angle"),
-            (self.sp_nozzle_len, "sp_nozzle_len"), (self.sp_chamber_p, "sp_chamber_p"),
         ]
         for field, key in self._live:
             if isinstance(field, QComboBox):
@@ -768,6 +822,20 @@ class DesignerWindow(QWidget):
         self.chk_meas.toggled.connect(lambda _on: self._on_live_change("chk_meas"))
 
         self.recompute()
+
+    def _apply_startup_geometry(self):
+        """اندازه و جای شروع را مانند پنجرهٔ اصلی ایستگاه تنظیم می‌کند."""
+        screen = QGuiApplication.primaryScreen()
+        if screen is None:
+            self.resize(1280, 820)
+            return
+        avail = screen.availableGeometry()
+        margin = 60
+        w = max(self.minimumWidth(), min(1280, avail.width() - margin))
+        h = max(self.minimumHeight(), min(820, avail.height() - margin))
+        self.resize(w, h)
+        self.move(avail.x() + (avail.width() - w) // 2,
+                  avail.y() + (avail.height() - h) // 2)
 
     # ------------------------------------------------------------------
     def _on_live_change(self, key: str):
@@ -847,7 +915,7 @@ class DesignerWindow(QWidget):
             if span is not None:
                 lines.append(
                     f"دهانهٔ باله را از {num(self.sp_span.value(), 'mm', 0)} به "
-                    f"{num(span, 'mm', 0)} ببرید تا حاشیه به ۱٫۵ کالیبر برسد "
+                    f"{num(span, 'mm', 0)} ببرید تا حاشیه به 1.5 کالیبر برسد "
                     "(وترها ثابت می‌مانند).")
             mn = suggest_nose_mass_g(geo, res.x_cg_mm, m_tot)
             if mn is not None:
@@ -863,7 +931,7 @@ class DesignerWindow(QWidget):
             if span is not None:
                 lines.append(
                     f"دهانهٔ باله را به {num(span, 'mm', 0)} کم کنید تا حاشیه "
-                    "حدود ۲ کالیبر شود و هواروک در باد کمتر شود.")
+                    "حدود 2 کالیبر شود و هواروک در باد کمتر شود.")
             else:
                 lines.append("باله‌ها را کوچک‌تر یا دماغه را سبک‌تر کنید.")
         else:
@@ -881,9 +949,7 @@ class DesignerWindow(QWidget):
     _FIELDS = ["sp_diameter", "sp_body_len", "sp_nose_len", "sp_nose_mass",
                "sp_root", "sp_tip", "sp_span", "sp_sweep", "sp_fin_mass",
                "sp_body_mass", "sp_body_pos", "sp_engine_mass", "sp_propellant_mass",
-               "sp_engine_pos", "sp_chute_mass", "sp_chute_diameter", "sp_chute_pos",
-               "sp_throat", "sp_exit",
-               "sp_conv_angle", "sp_div_angle", "sp_nozzle_len", "sp_chamber_p"]
+               "sp_engine_pos", "sp_chute_mass", "sp_chute_diameter", "sp_chute_pos"]
 
     def export_design_payload(self) -> dict:
         """ساخت قرارداد کامل انتقال به ایستگاه.
@@ -903,7 +969,7 @@ class DesignerWindow(QWidget):
         return {
             "schema_version": 1,
             "mode": "designer",
-            "units": {"length": "mm", "mass": "g", "pressure": "bar"},
+            "units": {"length": "mm", "mass": "g"},
             "geometry": {
                 "body_diameter_mm": geo.body_diameter_mm,
                 "body_length_mm": geo.body_length_mm,
@@ -944,14 +1010,8 @@ class DesignerWindow(QWidget):
                 "verdict": res.verdict,
                 "measured_cg": self.chk_meas.isChecked(),
             },
-            "nozzle": {
-                "throat_diameter_mm": self.sp_throat.value(),
-                "exit_diameter_mm": self.sp_exit.value(),
-                "convergent_angle_deg": self.sp_conv_angle.value(),
-                "divergent_angle_deg": self.sp_div_angle.value(),
-                "length_cm": self.sp_nozzle_len.value(),
-                "chamber_pressure_bar": self.sp_chamber_p.value(),
-            },
+            # موتور و نازل در ایستگاه اصلی وارد می‌شوند و عمداً از قرارداد
+            # طراح حذف شده‌اند تا مقادیر آن‌ها بازنویسی نشود.
         }
 
     def transfer_to_station(self):
@@ -962,7 +1022,7 @@ class DesignerWindow(QWidget):
             from PySide6.QtWidgets import QMessageBox
             QMessageBox.warning(self, "انتقال طرح", f"طرح به ایستگاه ارسال نشد:\n{exc}")
             return False
-        self.btn_transfer.setText("✅ طرح به ایستگاه رسید")
+        self.btn_transfer.setText("✅ ارسال شد")
         self.btn_transfer.setEnabled(False)
         # فایل در صورت بسته‌بودن ایستگاه هم باقی می‌ماند؛ در اجرای عادی،
         # تایمر ایستگاه در همین فاصله آن را می‌خواند و پنجرهٔ فعلی بسته می‌شود.

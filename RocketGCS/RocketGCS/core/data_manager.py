@@ -326,8 +326,8 @@ class DataManager(QObject):
 
         این متد مستقل از UI است تا انتقال واقعی و تست خودکار هر دو از یک مسیر
         استفاده کنند. مقادیر دستیِ پرتاب مثل محل/زاویه/قطر چتر حفظ می‌شوند؛
-        همهٔ مواردی که طراح دارد (بدنه، باله، جرم، CG/CP و نازل) جایگزین
-        می‌شوند.
+        مواردی که طراح دارد (بدنه، باله، جرم و CG/CP) جایگزین می‌شوند؛
+        موتور و نازل از صفحهٔ مأموریت ایستگاه مدیریت می‌شوند.
         """
         if not isinstance(payload, dict):
             return False
@@ -335,7 +335,9 @@ class DataManager(QObject):
         fins = geo.get("fins") or {}
         mass = payload.get("mass") or {}
         stability = payload.get("stability") or {}
-        nozzle = payload.get("nozzle") or {}
+        # مشخصات موتور/نازل از صفحهٔ مأموریت ایستگاه می‌آید؛ طراح راکت
+        # نباید در صورت نبودن این بخش، مقادیر فعلی ایستگاه را صفر کند.
+        nozzle = payload.get("nozzle")
 
         def num(value, default=0.0):
             try:
@@ -381,12 +383,13 @@ class DataManager(QObject):
         if "chute_diameter_m" in mass:
             m.chute_diameter_m = max(0.0, num(mass.get("chute_diameter_m")))
 
-        mo.throat_diameter = num(nozzle.get("throat_diameter_mm"))
-        mo.exit_diameter = num(nozzle.get("exit_diameter_mm"))
-        mo.convergent_angle = num(nozzle.get("convergent_angle_deg"))
-        mo.divergent_angle = num(nozzle.get("divergent_angle_deg"))
-        mo.nozzle_length = num(nozzle.get("length_cm"))
-        mo.chamber_pressure_bar = num(nozzle.get("chamber_pressure_bar"), 40.0) or 40.0
+        if isinstance(nozzle, dict):
+            mo.throat_diameter = num(nozzle.get("throat_diameter_mm"))
+            mo.exit_diameter = num(nozzle.get("exit_diameter_mm"))
+            mo.convergent_angle = num(nozzle.get("convergent_angle_deg"))
+            mo.divergent_angle = num(nozzle.get("divergent_angle_deg"))
+            mo.nozzle_length = num(nozzle.get("length_cm"))
+            mo.chamber_pressure_bar = num(nozzle.get("chamber_pressure_bar"), 40.0) or 40.0
 
         self.refresh_motor_performance()
         self.mission_changed.emit()
