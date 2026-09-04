@@ -85,12 +85,17 @@ BUILD_TIPS = [
 
 
 def _lbl(text: str, size: float, color: str, bold: bool = False) -> QLabel:
-    """برچسب متنِ ساده، راست‌چین، با جهت RTL صریح (بدون rich-text)."""
+    """برچسب متنِ ساده، راست‌چین، با جهت RTL صریح (بدون rich-text).
+
+    راست‌چینی با Qt.AlignRight | Qt.AlignAbsolute انجام می‌شود: بدون
+    AlignAbsolute موتور متنِ Qt پرچم Right را برای پاراگراف فارسی نسبت به جهت
+    متن تعبیر می‌کند و نوشته عملاً چپ می‌افتد (همان اشکالی که پنج بار گزارش شد).
+    """
     w = QLabel(text)
     w.setTextFormat(Qt.PlainText)
     w.setWordWrap(True)
     w.setLayoutDirection(Qt.RightToLeft)
-    w.setAlignment(Qt.AlignRight | Qt.AlignTop)
+    w.setAlignment(Qt.AlignRight | Qt.AlignAbsolute | Qt.AlignTop)
     w.setStyleSheet(f"color: {color}; font-size: {size}px; "
                     f"font-family: 'Shabnam'; background: transparent; border: none;"
                     + (" font-weight: 700;" if bold else ""))
@@ -136,7 +141,7 @@ def _card(title: str, steps, numbered: bool = True,
     head = QLabel(title)
     head.setTextFormat(Qt.PlainText)
     head.setLayoutDirection(Qt.RightToLeft)
-    head.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+    head.setAlignment(Qt.AlignRight | Qt.AlignAbsolute | Qt.AlignVCenter)
     head.setStyleSheet(f"color: {accent}; font-size: 19px; font-weight: 800;"
                        " font-family: 'Shabnam'; background: transparent;"
                        " border: none;")
@@ -161,7 +166,7 @@ def build_guide_page() -> QWidget:
     title = QLabel("راهنمای اندازه‌گیری CG و ساخت")
     title.setTextFormat(Qt.PlainText)
     title.setLayoutDirection(Qt.RightToLeft)
-    title.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+    title.setAlignment(Qt.AlignRight | Qt.AlignAbsolute | Qt.AlignVCenter)
     title.setStyleSheet(f"color: {THEME['text']}; font-size: 20px; "
                         "font-weight: 800; font-family: 'Shabnam';")
     outer.addWidget(title)

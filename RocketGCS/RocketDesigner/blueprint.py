@@ -324,6 +324,10 @@ class Blueprint(QWidget):
         def sx(x): return cx + (total / 2.0 - x) * sc
         def sy(y): return cy + y * sc
 
+        # نسخهٔ مهارشده برای نشانگرها/اندازه‌ها: اگر CG اندازه‌گیری‌شده بیرون از
+        # بدنه وارد شود، برچسب‌ها از بوم بیرون نمی‌زنند
+        def sxc(x): return min(max(sx(x), 10.0), float(w) - 10.0)
+
         self._cy, self._sc = cy, sc
 
         # خطِ محورِ خیلی ملایم (حسِ فضای HUD)
@@ -336,8 +340,8 @@ class Blueprint(QWidget):
         self._paint_nose(p, geo, sx(0), sx(geo.nose_length_mm), cy, r * sc)
         self._paint_fins(p, geo, sx, sy, r)
         if res is not None:
-            self._paint_markers(p, res, sx, cy)
-            self._paint_dims(p, geo, res, sx, sy, r, s_fin, total, cy, sc)
+            self._paint_markers(p, res, sxc, cy)
+            self._paint_dims(p, geo, res, sxc, sy, r, s_fin, total, cy, sc)
         self._paint_ruler(p, w, h, sc, sx(0))
 
     # ------------------------------------------------------------------
@@ -467,6 +471,8 @@ class Blueprint(QWidget):
 
     def _marker(self, p, x, cy, hexcol, tag, sub, above, fx_key=None):
         rad = 9
+        # مهار نشانگر داخل بوم تا حلقه و چیپ‌ها هرگز بریده نشوند
+        x = min(max(x, rad + 4.0), float(self.width()) - rad - 4.0)
         c = QColor(hexcol)
         rgb = (c.red(), c.green(), c.blue())
         # هالهٔ نور
@@ -549,6 +555,8 @@ class Blueprint(QWidget):
         fm = QFontMetricsF(f)
         tw = fm.horizontalAdvance(text)
         hgt = 18.0
+        # مهار افقی چیپ داخل بوم
+        cx = min(max(cx, tw / 2 + 10.0), float(self.width()) - tw / 2 - 10.0)
         rect = QRectF(cx - tw / 2 - 8, cy - hgt / 2, tw + 16, hgt)
         if accent:
             a = QColor(accent)
@@ -591,7 +599,9 @@ class Blueprint(QWidget):
             x -= step_px
             i += 1
         p.setPen(alpha_color(THEME["sub"], 160))
-        p.drawText(QPointF(MARGIN - 6, y + 12), "سانتی‌متر از نوک دماغه")
+        # برچسب محور از سمت راست (صفرِ خط‌کش در چیدمان راست‌به‌چپ سمت راست است)
+        p.drawText(QRectF(MARGIN - 8, y + 2, w - 2 * (MARGIN - 8), 12),
+                   Qt.AlignRight | Qt.AlignVCenter, "سانتی‌متر از نوک دماغه")
 
     # ------------------------------------------------------------------
     # لایهٔ انیمیشن: پالسِ نورِ نرم روی بافرهای آماده

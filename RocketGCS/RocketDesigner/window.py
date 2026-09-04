@@ -39,7 +39,9 @@ from blueprint import Blueprint, THEME, fa, verdict_color  # noqa: E402
 from gauge import MarginGauge  # noqa: E402
 from guide import build_guide_page  # noqa: E402
 
-FIELD_W = 92
+FIELD_W = 68                     # عرض فیلد عدد: فقط پیکان‌ها + یک عدد جا بگیرد
+COMBO_W = 92                     # عرض کشویی‌ها (متن + پیکان)
+LABEL_W = 158                    # عرض ستون عنوان‌ها تا همهٔ ردیف‌ها هم‌تراز بمانند
 FONT_FAMILY = "Shabnam"          # سری فونت سراسری برنامه
 LOGO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 
@@ -76,12 +78,21 @@ DESIGNER_QSS = f"""
 QWidget {{ background: transparent; color: {THEME["text"]};
   font-family: 'Shabnam'; font-size: 14px; }}
 
-/* ---- فیلدها: شیشهٔ تیرهٔ نرم ---- */
-QSpinBox, QDoubleSpinBox, QComboBox {{
+/* ---- فیلدها: شیشهٔ تیره نرم و جمع‌وجور (به اندازهٔ پیکان‌ها + عدد) ---- */
+QSpinBox, QDoubleSpinBox {{
   background: rgba(9, 14, 30, 0.62);
   border: 1px solid {EDGE};
-  border-radius: 10px; padding: 4px 30px 4px 10px; color: {THEME["text"]};
-  min-width: {FIELD_W}px; min-height: 18px; max-height: 18px;
+  border-radius: 9px; padding: 2px 25px 2px 3px; color: {THEME["text"]};
+  min-width: {FIELD_W}px; max-width: {FIELD_W}px;
+  min-height: 18px; max-height: 20px;
+  selection-background-color: {_rgba(THEME["neon_jade"], 80)};
+  selection-color: #eafffa; }}
+QComboBox {{
+  background: rgba(9, 14, 30, 0.62);
+  border: 1px solid {EDGE};
+  border-radius: 9px; padding: 2px 25px 2px 5px; color: {THEME["text"]};
+  min-width: {COMBO_W}px; max-width: {COMBO_W}px;
+  min-height: 18px; max-height: 20px;
   selection-background-color: {_rgba(THEME["neon_jade"], 80)};
   selection-color: #eafffa; }}
 QSpinBox:focus, QDoubleSpinBox:focus {{
@@ -301,14 +312,14 @@ class SoftSpinBox(QSpinBox):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setButtonSymbols(QAbstractSpinBox.NoButtons)
-        self.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.setAlignment(Qt.AlignCenter)
         self._pad = _StepPad(self)
         self._pad.up.connect(self.stepUp)
         self._pad.down.connect(self.stepDown)
 
     def resizeEvent(self, ev):
         super().resizeEvent(ev)
-        self._pad.setGeometry(self.width() - 25, 4, 21, self.height() - 8)
+        self._pad.setGeometry(self.width() - 24, 3, 20, self.height() - 6)
 
 
 class SoftDoubleSpinBox(QDoubleSpinBox):
@@ -317,14 +328,14 @@ class SoftDoubleSpinBox(QDoubleSpinBox):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setButtonSymbols(QAbstractSpinBox.NoButtons)
-        self.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.setAlignment(Qt.AlignCenter)
         self._pad = _StepPad(self)
         self._pad.up.connect(self.stepUp)
         self._pad.down.connect(self.stepDown)
 
     def resizeEvent(self, ev):
         super().resizeEvent(ev)
-        self._pad.setGeometry(self.width() - 25, 4, 21, self.height() - 8)
+        self._pad.setGeometry(self.width() - 24, 3, 20, self.height() - 6)
 
 
 def _dark_popup(cmb: QComboBox):
@@ -450,17 +461,24 @@ class ParamCard(QFrame):
         lay.addLayout(self.body)
 
     def add_row(self, label_text: str, field: QWidget, tooltip: str = ""):
+        """یک سطر: عنوان در ستونِ راست + فیلدِ جمع‌وجور چسبیده به آن.
+
+        نکتهٔ جهت: برای متن فارسی، Qt.AlignRight به‌تنهایی توسط موتور متن نسبت به
+        «جهت پاراگراف» تعبیر می‌شود و نتیجه چپ می‌افتد؛ بنابراین AlignAbsolute
+        اضافه شده تا راست‌چینیِ فیزیکی در همهٔ نسخه‌های Qt قطعی باشد.
+        """
         row = QHBoxLayout()
-        row.setSpacing(6)
+        row.setSpacing(8)
         lab = QLabel(label_text)
         lab.setStyleSheet(f"color: {THEME['sub']}; background: transparent;"
                           " border: none; font-size: 12.5px;")
-        lab.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        lab.setFixedWidth(LABEL_W)
+        lab.setAlignment(Qt.AlignRight | Qt.AlignAbsolute | Qt.AlignVCenter)
         if tooltip:
             lab.setToolTip(tooltip)
         row.addWidget(lab)
-        row.addStretch(1)
         row.addWidget(field)
+        row.addStretch(1)
         self.body.addLayout(row)
 
 
@@ -588,7 +606,7 @@ class DesignerWindow(QWidget):
         # ---- پنل پارامترها (راست) ----
         panel_scroll = QScrollArea()
         panel_scroll.setWidgetResizable(True)
-        panel_scroll.setFixedWidth(340)
+        panel_scroll.setFixedWidth(300)   # باریک: ردیف‌ها جمع‌وجور شدند
         panel = QWidget()
         pv = QVBoxLayout(panel)
         pv.setContentsMargins(2, 2, 6, 2)
@@ -696,7 +714,8 @@ class DesignerWindow(QWidget):
         self.lbl_advice.setWordWrap(True)
         self.lbl_advice.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         self.lbl_advice.setFixedHeight(96)
-        self.lbl_advice.setAlignment(Qt.AlignRight | Qt.AlignTop)
+        # راست‌چینی قطعی: AlignAbsolute تا موتور متن آن را وارونه نکند
+        self.lbl_advice.setAlignment(Qt.AlignRight | Qt.AlignAbsolute | Qt.AlignTop)
         self.lbl_advice.setStyleSheet(_advice_qss(THEME["neon_jade"]))
         p0.addWidget(self.lbl_advice)
         p0.addStretch(1)
