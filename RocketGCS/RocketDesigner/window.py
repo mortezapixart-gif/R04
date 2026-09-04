@@ -21,11 +21,11 @@ import sys
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal, QTimer, QLocale
 from PySide6.QtGui import (QBrush, QColor, QFont, QLinearGradient, QPainter,
                            QPainterPath, QPalette, QPen, QPixmap, QGuiApplication)
-from PySide6.QtWidgets import (QAbstractSpinBox, QButtonGroup, QCheckBox, QComboBox,
-                               QDoubleSpinBox, QFileDialog, QFrame, QGridLayout,
-                               QHBoxLayout, QLabel, QPushButton, QScrollArea,
-                               QSizePolicy, QSpinBox, QStackedWidget,
-                               QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QAbstractSpinBox, QBoxLayout, QButtonGroup, QCheckBox,
+                               QComboBox, QDoubleSpinBox, QFileDialog, QFrame,
+                               QGridLayout, QHBoxLayout, QLabel, QPushButton,
+                               QScrollArea, QSizePolicy, QSpinBox,
+                               QStackedWidget, QVBoxLayout, QWidget)
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                 "RocketGCS"))
@@ -40,9 +40,10 @@ from blueprint import Blueprint, THEME, fa, verdict_color  # noqa: E402
 from gauge import MarginGauge  # noqa: E402
 from guide import build_guide_page  # noqa: E402
 
-FIELD_W = 102
-FIELD_H = 30
-COMBO_W = 148
+# حداقل اندازهٔ لازم برای سه رقم و پدِ فلش بالا/پایین؛ بدون فضای خالی اضافه.
+FIELD_W = 78
+FIELD_H = 26
+COMBO_W = 126
 FONT_FAMILY = "Shabnam"          # سری فونت سراسری برنامه
 EN_LOCALE = QLocale(QLocale.English, QLocale.UnitedStates)
 LOGO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
@@ -84,7 +85,7 @@ QWidget {{ background: transparent; color: {THEME["text"]};
 QSpinBox, QDoubleSpinBox, QComboBox {{
   background: rgba(20, 35, 68, 0.92);
   border: 1px solid rgba(124, 196, 255, 0.42);
-  border-radius: 10px; padding: 3px 30px 3px 8px; color: {THEME["text"]};
+  border-radius: 8px; padding: 2px 27px 2px 4px; color: {THEME["text"]};
   min-width: {FIELD_W}px; min-height: {FIELD_H}px; max-height: {FIELD_H}px;
   selection-background-color: {_rgba(THEME["neon_jade"], 120)};
   selection-color: #ffffff; }}
@@ -450,6 +451,7 @@ class ParamCard(QFrame):
 
     def __init__(self, title: str, color: str):
         super().__init__()
+        self.setLayoutDirection(Qt.RightToLeft)
         self.setObjectName("ParamCard")
         self.setStyleSheet(
             f"QFrame#ParamCard {{ background: qlineargradient(x1:0, y1:0,"
@@ -486,38 +488,31 @@ class ParamCard(QFrame):
         head.addWidget(t)
         head.addStretch(1)
         lay.addLayout(head)
-        # پارامترها در دو ستون قرار می‌گیرند؛ برچسب نزدیکِ فیلد می‌ماند و
-        # کارت‌ها در ارتفاع پنجرهٔ اصلی جا می‌شوند.
-        self.body = QGridLayout()
+        # هر عنوان و فیلد دقیقاً در یک سطر است؛ فاصلهٔ افقی فقط به اندازهٔ
+        # لازم برای خواندن متن می‌ماند و فیلد عددی فضای خالی اضافه ندارد.
+        self.body = QVBoxLayout()
         self.body.setContentsMargins(0, 0, 0, 0)
-        self.body.setHorizontalSpacing(9)
-        self.body.setVerticalSpacing(5)
-        self._field_index = 0
+        self.body.setSpacing(4)
         lay.addLayout(self.body)
 
     def add_row(self, label_text: str, field: QWidget, tooltip: str = ""):
-        cell = QWidget()
-        cell.setLayoutDirection(Qt.RightToLeft)
-        cell.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        col = QVBoxLayout(cell)
-        col.setContentsMargins(0, 0, 0, 0)
-        col.setSpacing(2)
+        row = QHBoxLayout()
+        row.setDirection(QBoxLayout.RightToLeft)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
         lab = QLabel(label_text)
         lab.setTextFormat(Qt.PlainText)
-        lab.setWordWrap(True)
+        lab.setWordWrap(False)
         lab.setLayoutDirection(Qt.RightToLeft)
         lab.setStyleSheet(f"color: {THEME['sub']}; background: transparent;"
-                          " border: none; font-size: 11.5px;")
+                          " border: none; font-size: 12px;")
         lab.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        lab.setMinimumHeight(20)
+        lab.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         if tooltip:
             lab.setToolTip(tooltip)
-        col.addWidget(lab)
-        col.addWidget(field, 0, Qt.AlignRight)
-        row, column = divmod(self._field_index, 2)
-        self.body.addWidget(cell, row, column)
-        self.body.setColumnStretch(column, 1)
-        self._field_index += 1
+        row.addWidget(lab, 1)
+        row.addWidget(field, 0, Qt.AlignLeft | Qt.AlignVCenter)
+        self.body.addLayout(row)
 
 
 # ---------------------------------------------------------------------------
@@ -742,8 +737,7 @@ class DesignerWindow(QWidget):
         self.sp_meas.setAlignment(Qt.AlignCenter)
         self.sp_meas.setEnabled(False)
         self.chk_meas.toggled.connect(self.sp_meas.setEnabled)
-        card4.body.addWidget(self.chk_meas, 0, 0, 1, 2)
-        card4._field_index = 2
+        card4.body.addWidget(self.chk_meas)
         card4.add_row("فاصلهٔ CG از نوک (cm)", self.sp_meas)
         pv.addWidget(card4)
 
@@ -761,6 +755,7 @@ class DesignerWindow(QWidget):
 
         # --- صفحهٔ 0: بوم + گیج + چیپ‌ها + پیشنهاد ---
         page0 = QWidget()
+        page0.setLayoutDirection(Qt.RightToLeft)
         p0 = QVBoxLayout(page0)
         p0.setContentsMargins(0, 0, 0, 0)
         p0.setSpacing(12)
@@ -784,6 +779,8 @@ class DesignerWindow(QWidget):
         p0.addLayout(chips)
         self.lbl_advice = QLabel("...")
         self.lbl_advice.setObjectName("AdviceCard")
+        self.lbl_advice.setTextFormat(Qt.PlainText)
+        self.lbl_advice.setLayoutDirection(Qt.RightToLeft)
         self.lbl_advice.setWordWrap(True)
         self.lbl_advice.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         self.lbl_advice.setFixedHeight(96)

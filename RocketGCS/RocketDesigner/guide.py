@@ -127,6 +127,7 @@ def _step_row(idx: int, title: str, desc: str, numbered: bool,
 def _card(title: str, steps, numbered: bool = True,
           accent: str = THEME["teal"]) -> QFrame:
     f = QFrame()
+    f.setLayoutDirection(Qt.RightToLeft)
     f.setStyleSheet(
         "QFrame { background: rgba(13, 20, 40, 0.55); border: 1px solid "
         + _rgba(accent, 60) + "; border-radius: 16px; }")
