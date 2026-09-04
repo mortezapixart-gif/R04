@@ -1,0 +1,10 @@
+PySide6>=6.6.0
+pyqtgraph>=0.13.3
+PyOpenGL>=3.1.7
+matplotlib>=3.8.0
+arabic-reshaper>=3.0.0
+python-bidi>=0.6.9
+pandas>=2.1.0
+numpy>=1.26.0
+pyserial>=3.5
+openpyxl>=3.1.0
