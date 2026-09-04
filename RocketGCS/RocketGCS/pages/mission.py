@@ -14,7 +14,7 @@ import datetime
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QDoubleSpinBox, QComboBox,
                                 QPushButton, QLabel, QFrame, QGridLayout, QSizePolicy)
 from PySide6.QtCore import Qt
-from ui.widgets import page_title, section_title, form_grid
+from ui.widgets import section_title, form_grid
 from core.data_manager import data_manager
 from core.jalali import gregorian_date_to_jalali_str
 from core.nozzle import optimal_expansion_ratio, classify_expansion
@@ -61,7 +61,6 @@ class MissionPage(QWidget):
         super().__init__()
         self.setLayoutDirection(Qt.RightToLeft)
         root = QVBoxLayout(self)
-        root.addWidget(page_title("اطلاعات مأموریت و نازل"))
 
         # ============================================================
         # اطلاعات مأموریت (راست) + اطلاعات نازل (چپ) -- کنار هم در یک ردیف
