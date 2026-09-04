@@ -130,17 +130,6 @@ class MissionPage(QWidget):
         mission_card = _tight_card(form_grid(mission_rows))
         mission_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         mission_col.addWidget(mission_card)
-        self.design_status_lbl = QLabel("")
-        self.design_status_lbl.setWordWrap(True)
-        self.design_status_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.design_status_lbl.setStyleSheet(
-            "color:#8fd8ff; background:rgba(45, 120, 180, 0.12); "
-            "border:1px solid rgba(100, 190, 255, 0.28); border-radius:8px; padding:6px;")
-        mission_col.addWidget(self.design_status_lbl)
-        self.manual_mode_btn = QPushButton("ورود دستی؛ حذف هندسهٔ دریافت‌شده")
-        self.manual_mode_btn.clicked.connect(self._switch_to_manual_mode)
-        self.manual_mode_btn.setVisible(False)
-        mission_col.addWidget(self.manual_mode_btn)
         mission_wrap = QWidget()
         mission_wrap.setLayout(mission_col)
 
@@ -208,17 +197,33 @@ class MissionPage(QWidget):
         nozzle_col = QVBoxLayout()
         nozzle_col.setSpacing(4)
         nozzle_col.addWidget(section_title("اطلاعات نازل"))
-        nozzle_card = _tight_card(form_grid(nozzle_rows))
+        nozzle_form = form_grid(nozzle_rows)
+        # ردیف‌های نازل فشرده‌تر باشند تا فضای خالیِ داخل این کارت کم شود.
+        nozzle_form.layout().setVerticalSpacing(6)
+        nozzle_card = _tight_card(nozzle_form)
         nozzle_card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        nozzle_col.addWidget(nozzle_card)
 
-        # بازبینی هندسی طول نازل: طولِ بخش واگرا از قطرها + زاویهٔ واگرا
-        # محاسبه می‌شود و با عدد واردشدهٔ کاربر مقایسه می‌گردد.
+        # بازبینی هندسی طول نازل داخل خودِ کارت اطلاعات نازل نمایش داده می‌شود.
         self.nozzle_len_note = QLabel("")
         self.nozzle_len_note.setWordWrap(True)
         self.nozzle_len_note.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.nozzle_len_note.setStyleSheet("color:#96a2b5; font-size:12px; padding:2px 6px;")
-        nozzle_col.addWidget(self.nozzle_len_note)
+        nozzle_card.layout().addWidget(self.nozzle_len_note)
+        nozzle_col.addWidget(nozzle_card)
+
+        # منبع هندسه کنار همان بخشی است که به آن مربوط است؛ دکمه همیشه دیده
+        # می‌شود اما تا وقتی طرحی از طراح دریافت نشده، خاکستری و غیرفعال است.
+        self.design_status_lbl = QLabel("")
+        self.design_status_lbl.setWordWrap(True)
+        self.design_status_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.design_status_lbl.setStyleSheet(
+            "color:#8fd8ff; background:rgba(45, 120, 180, 0.12); "
+            "border:1px solid rgba(100, 190, 255, 0.28); border-radius:8px; padding:6px;")
+        nozzle_col.addWidget(self.design_status_lbl)
+        self.manual_mode_btn = QPushButton("ورود دستی؛ حذف هندسهٔ دریافت‌شده")
+        self.manual_mode_btn.clicked.connect(self._switch_to_manual_mode)
+        self.manual_mode_btn.setEnabled(False)
+        nozzle_col.addWidget(self.manual_mode_btn)
         nozzle_wrap = QWidget()
         nozzle_wrap.setLayout(nozzle_col)
 
@@ -382,7 +387,7 @@ class MissionPage(QWidget):
     def _update_design_status(self):
         d = data_manager.effective_design_parameters()
         source = "طرح دریافت‌شده از طراح راکت" if d["design_source"] == "designer" else "ورود دستی"
-        self.manual_mode_btn.setVisible(d["design_source"] == "designer")
+        self.manual_mode_btn.setEnabled(d["design_source"] == "designer")
         fallback = " (CP/CG نرمال خودکار؛ در فرم دستی پارامتر مستقیمی ندارد)" if d["aero_defaulted"] else ""
         fins = d["fin_count"] or "پیش‌فرض"
         self.design_status_lbl.setText(
